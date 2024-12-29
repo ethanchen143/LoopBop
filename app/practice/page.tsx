@@ -38,7 +38,7 @@ export default function PracticePage() {
     const checkAuth = async () => {
       const token = localStorage.getItem("token");
       if (!token) {
-        router.push("/login"); // Redirect to login if no token
+        router.push("/auth"); // Redirect to login if no token
         return;
       }
 
@@ -48,11 +48,11 @@ export default function PracticePage() {
         });
         if (response.ok) {
         } else {
-          router.push("/login"); // Redirect if authentication fails
+          router.push("/auth"); // Redirect if authentication fails
         }
       } catch (error) {
         console.error("Error verifying user authentication:", error);
-        router.push("/login"); // Redirect on error
+        router.push("/auth"); // Redirect on error
       }
     };
 
