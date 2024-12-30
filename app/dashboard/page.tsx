@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Globe, Music, Trophy, Search, Mic } from 'lucide-react';
+import { Music, Trophy, Search, Mic } from 'lucide-react';
 
 interface UserData {
   email: string;
@@ -93,7 +93,7 @@ export default function DashboardPage() {
     <div className="flex flex-col min-h-screen bg-purple-50">
       <header className="px-4 lg:px-6 h-14 flex items-center bg-white">
         <Link className="flex items-center justify-center" href="/">
-          <Globe className="h-6 w-6 text-purple-600" />
+          <Music className="h-6 w-6 text-purple-600" />
           <span className="ml-2 text-2xl font-bold text-purple-600">LoopBop</span>
         </Link>
         <nav className="ml-auto flex">
@@ -136,10 +136,11 @@ export default function DashboardPage() {
           </Card>
           <Card className="bg-purple-600 text-white hover:bg-purple-700 transition-colors cursor-pointer" onClick={() => router.push("/practice")}>
             <CardHeader>
-              <CardTitle className="text-white">Start Practice</CardTitle>
+              <CardTitle className="text-white text-2xl">Start Practice</CardTitle>
+
             </CardHeader>
             <CardContent>
-              <p className="text-lg">Begin your musical journey now!</p>
+              <p className="text-lg">Train your promting skills now!</p>
             </CardContent>
           </Card>
         </div>
@@ -173,7 +174,7 @@ export default function DashboardPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p>Discover songs, artists, and musical tags</p>
+                <p>Discover songs, albums, artists, and music tags</p>
               </CardContent>
             </Card>
             

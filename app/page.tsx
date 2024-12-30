@@ -1,8 +1,9 @@
 "use client";
+
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { CheckCircle, Globe, Headphones, Zap } from 'lucide-react';
+import { CheckCircle, Music, Headphones, Zap } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 export default function LandingPage() {
@@ -16,7 +17,7 @@ export default function LandingPage() {
     <div className="flex flex-col min-h-screen">
       <header className="px-4 lg:px-6 h-14 flex items-center">
         <Link className="flex items-center justify-center" href="#">
-          <Globe className="h-6 w-6 text-purple-600" />
+          <Music className="h-6 w-6 text-purple-600" />
           <span className="ml-2 text-2xl font-bold text-purple-600">LoopBop</span>
         </Link>
         <nav className="ml-auto flex gap-4 sm:gap-6 justify-center">

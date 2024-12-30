@@ -1,22 +1,37 @@
-import { NextResponse } from "next/server";
+import { NextResponse,NextRequest } from "next/server";
 import { getSession } from "@/lib/neo4j";
 
-export async function GET() {
+export async function GET(request:NextRequest) {
   try {
-    // Create separate sessions for the song and random queries
+    const url = new URL(request.url);
+    const songTitle = url.searchParams.get("song"); // Get the song title from query parameters
     const mainSession = getSession();
-    const songQuery = `
-      MATCH (s:Song)
-      MATCH (artist:Artist)-[:MAKES]->(s)-[:BELONGS_TO]->(album:Album)
-      RETURN 
-        s.title AS name, 
-        s.youtube_link AS youtube,
-        artist.name AS artist, 
-        album.title AS album
-      ORDER BY rand()
-      LIMIT 1
-    `;
-    const songResult = await mainSession.run(songQuery);
+    // Query to fetch either a specific song or a random one
+    const songQuery = songTitle
+      ? `
+        MATCH (s:Song {title: $title})
+        MATCH (artist:Artist)-[:MAKES]->(s)-[:BELONGS_TO]->(album:Album)
+        RETURN 
+          s.title AS name, 
+          s.youtube_link AS youtube,
+          artist.name AS artist, 
+          album.title AS album
+      `
+      : `
+        MATCH (s:Song)
+        MATCH (artist:Artist)-[:MAKES]->(s)-[:BELONGS_TO]->(album:Album)
+        RETURN 
+          s.title AS name, 
+          s.youtube_link AS youtube,
+          artist.name AS artist, 
+          album.title AS album
+        ORDER BY rand()
+        LIMIT 1
+      `;
+
+    const params = songTitle ? { title: songTitle } : {}; // Pass the title parameter only if provided
+
+    const songResult = await mainSession.run(songQuery, params);
 
     if (songResult.records.length === 0) {
       return NextResponse.json({ message: "No songs found in the database." }, { status: 404 });

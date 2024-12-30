@@ -5,17 +5,19 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
-import { Globe, Mic } from 'lucide-react';
+import { Music, Mic } from 'lucide-react';
+import { useRouter } from "next/navigation";
 
 const tagCategories = [
-  { name: "Sound", tags: ["Acoustic", "Electric", "Synthesizer", "Orchestral"] },
+  { name: "Sound", tags: ["guitar", "drum", "piano", "bass"] },
   { name: "Era", tags: ["60s", "70s", "80s", "90s", "2000s", "2010s", "2020s"] },
-  { name: "Mood", tags: ["Happy", "Sad", "Energetic", "Calm", "Aggressive"] },
-  { name: "Genre", tags: ["Rock", "Pop", "Hip-Hop", "Jazz", "Classical", "Electronic"] },
+  { name: "Mood", tags: ["happy", "sad", "energetic"] },
+  { name: "Genre", tags: ["rock", "pop", "hip hop", "jazz"] },
 ];
 
 export default function GeneratePage() {
   const [prompt, setPrompt] = useState("");
+  const router = useRouter();
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,12 +33,22 @@ export default function GeneratePage() {
     <div className="flex flex-col min-h-screen bg-purple-50">
       <header className="px-4 lg:px-6 h-14 flex items-center bg-white">
         <Link className="flex items-center justify-center" href="/dashboard">
-          <Globe className="h-6 w-6 text-purple-600" />
+          <Music className="h-6 w-6 text-purple-600" />
           <span className="ml-2 text-2xl font-bold text-purple-600">LoopBop</span>
         </Link>
+        <nav className="ml-auto flex gap-4 sm:gap-6">
+          <Button
+            variant="link"
+            onClick={() => {
+              router.push("/dashboard");
+            }}
+          >
+            Back to Dashboard
+          </Button>
+        </nav>
       </header>
       <main className="flex-1 container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-8 text-center">Music Generation Playground</h1>
+        <h1 className="text-3xl font-bold mb-8 text-center">Music Generation Playground (coming soon...)</h1>
         <form onSubmit={handleGenerate} className="mb-8 max-w-2xl mx-auto">
           <Textarea
             placeholder="Describe the music you want to generate..."
@@ -79,4 +91,3 @@ export default function GeneratePage() {
     </div>
   );
 }
-
