@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Globe, Search, Music, Clock, Tag, Volume2, Mic, Disc, User } from 'lucide-react';
+import { Globe, Search, Music, Clock, Tag, Volume2, Disc, User } from 'lucide-react';
 
 const categories = [
   { name: "Song", icon: Music },
