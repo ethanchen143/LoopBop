@@ -136,7 +136,7 @@ export async function GET() {
         title: record.get("name"),
         artist: record.get("artist"),
         album: record.get("album"),
-        question: "What genre best describes the song?",
+        question: "Which genres best describe the song?",
         options: formatOptions(
         genresResult,
         tagsRecord.get("genres") || [] // Ensure this is always an array

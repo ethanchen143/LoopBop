@@ -15,6 +15,7 @@ export async function POST(request: Request) {
 
     // Check if the user already exists
     const existingUser = await User.findOne({ email });
+    
     if (existingUser) {
       return NextResponse.json({ message: "Email already in use" }, { status: 400 });
     }
@@ -29,6 +30,7 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({ message: "User registered successfully" }, { status: 201 });
+    
   } catch (error) {
     console.error(error);
     return NextResponse.json({ message: "Server error" }, { status: 500 });

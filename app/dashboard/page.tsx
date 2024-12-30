@@ -6,20 +6,34 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Globe, Music, Trophy } from "lucide-react";
+import { Globe, Music, Trophy, Search, Mic } from 'lucide-react';
+
+interface UserData {
+  email: string;
+  exercises_count: number;
+  correct_count: number;
+  rank?: number;
+}
+
+interface LeaderboardEntry {
+  email: string;
+  exercises_count: number;
+  accuracy: number;
+}
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [userData, setUserData] = useState({
+  const [userData, setUserData] = useState<UserData>({
     email: "",
     exercises_count: 0,
     correct_count: 0,
   });
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const fetchUserData = async () => {
+    const fetchData = async () => {
       try {
         const token = localStorage.getItem("token");
         if (!token) {
@@ -27,34 +41,34 @@ export default function DashboardPage() {
           return;
         }
 
-        const response = await fetch("/api/user", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        const [userResponse, leaderboardResponse] = await Promise.all([
+          fetch("/api/user", {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch("/api/leaderboard", {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
 
-        if (response.ok) {
-          const data = await response.json();
-          setUserData(data);
+        if (userResponse.ok && leaderboardResponse.ok) {
+          const userData = await userResponse.json();
+          const leaderboardData = await leaderboardResponse.json();
+          setUserData(userData);
+          setLeaderboard(leaderboardData);
           setLoading(false);
         } else {
-          setError("Failed to fetch user data");
+          setError("Failed to fetch data");
           setLoading(false);
           router.push("/auth");
         }
       } catch (error) {
-        console.error("Error fetching user data:", error);
+        console.error("Error fetching data:", error);
         setError("An unexpected error occurred");
         setLoading(false);
       }
     };
-
-    fetchUserData();
+    fetchData();
   }, [router]);
-
-  const handleStartPractice = () => {
-    router.push("/practice");
-  };
 
   if (loading) {
     return (
@@ -72,10 +86,8 @@ export default function DashboardPage() {
     );
   }
 
-  const totalExercises = userData.exercises_count || 1; // Prevent division by zero
-  const averageScore = totalExercises
-    ? (userData.correct_count / totalExercises).toFixed(2)
-    : 0;
+  const totalExercises = userData.exercises_count || 1;
+  const averageScore = (userData.correct_count / totalExercises).toFixed(2);
 
   return (
     <div className="flex flex-col min-h-screen bg-purple-50">
@@ -84,11 +96,8 @@ export default function DashboardPage() {
           <Globe className="h-6 w-6 text-purple-600" />
           <span className="ml-2 text-2xl font-bold text-purple-600">LoopBop</span>
         </Link>
-        <nav className="ml-auto flex gap-4 sm:gap-6">
-          <Button variant="link">
-            {userData.email}
-          </Button>
-                
+        <nav className="ml-auto flex">
+          <Button variant="link">{userData.email}</Button>
           <Button
             variant="link"
             onClick={() => {
@@ -101,19 +110,16 @@ export default function DashboardPage() {
         </nav>
       </header>
       <main className="flex-1 container mx-auto px-4 py-8">
-        {/* <h1 className="text-3xl font-bold mb-8 text-center">Welcome, </h1> */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
                 <Music className="mr-2 h-6 w-6 text-purple-600" />
-                Completed Exercises
+                Completed Songs
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold mb-2">
-                {userData.exercises_count} Songs
-              </div>
+              <div className="text-3xl font-bold mb-2">{userData.exercises_count}</div>
             </CardContent>
           </Card>
           <Card>
@@ -128,14 +134,61 @@ export default function DashboardPage() {
               <Progress value={Number(averageScore)} className="w-full" />
             </CardContent>
           </Card>
+          <Card className="bg-purple-600 text-white hover:bg-purple-700 transition-colors cursor-pointer" onClick={() => router.push("/practice")}>
+            <CardHeader>
+              <CardTitle className="text-white">Start Practice</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-lg">Begin your musical journey now!</p>
+            </CardContent>
+          </Card>
         </div>
-        <div className="text-center">
-          <Button
-            onClick={handleStartPractice}
-            className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-full text-lg font-semibold"
-          >
-            Start Practice
-          </Button>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+          <Card>
+            <CardHeader>
+              <CardTitle>Leaderboard</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-2">
+                {leaderboard.map((entry, index) => (
+                  <li key={index} className="flex justify-between items-center">
+                    <span>{entry.email.split('@')[0]}</span>
+                    <span>{entry.exercises_count} songs, {entry.accuracy.toFixed()}% accuracy</span>
+                  </li>
+                ))}
+              </ul>
+              {userData.rank && userData.rank > 10 && (
+                <p className="mt-4">Your rank: {userData.rank}</p>
+              )}
+            </CardContent>
+          </Card>
+          
+          <div className="space-y-4">
+            <Card className="hover:bg-purple-100 transition-colors cursor-pointer" onClick={() => router.push("/explore")}>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Search className="mr-2 h-6 w-6 text-purple-600" />
+                  Exploration
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p>Discover songs, artists, and musical tags</p>
+              </CardContent>
+            </Card>
+            
+            <Card className="hover:bg-purple-100 transition-colors cursor-pointer" onClick={() => router.push("/playground")}>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Mic className="mr-2 h-6 w-6 text-purple-600" />
+                  Playground
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p>Generate your own music in our AI-powered playground</p>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </main>
       <footer className="py-6 text-center text-sm text-gray-500 bg-white">

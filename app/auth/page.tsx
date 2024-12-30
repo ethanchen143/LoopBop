@@ -30,13 +30,8 @@ export default function AuthPage() {
       const data = await response.json();
 
       if (response.ok) {
-        if (isLogin) {
-          // Save token to localStorage or state
-          localStorage.setItem("token", data.token);
-          router.push("/dashboard");
-        } else {
-          router.push("/auth");
-        }
+        localStorage.setItem("token", data.token);
+        router.push("/dashboard");
       } else {
         setError(data.message || "An error occurred");
       }
