@@ -20,4 +20,3 @@ export async function connectToDatabase(): Promise<mongoose.Connection> {
   global.mongoose.conn = await global.mongoose.promise;
   return global.mongoose.conn;
 }
-

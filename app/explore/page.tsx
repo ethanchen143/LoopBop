@@ -227,7 +227,7 @@ export default function ExplorePage() {
                   )}
                   {["Mood", "Era", "Genre", "Sound"].includes(selectedCategory) && (
                     <>
-                      <img src={selectedItem.profilePicture} alt={`${selectedItem.name} Image`} className="w-full h-auto rounded-lg mb-4" />
+                      {/* <img src={selectedItem.profilePicture} alt={`${selectedItem.name} Image`} className="w-full h-auto rounded-lg mb-4" /> */}
                       <p> {selectedItem.description || "No description available."}</p>
                     </>
                   )}
