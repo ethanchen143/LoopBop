@@ -78,10 +78,10 @@ export async function GET(request:NextRequest) {
     const soundsSession = getSession();
 
     const [moodsResult, erasResult, genresResult, soundsResult] = await Promise.all([
-      moodsSession.run(randomQuery("Mood","3")),
-      erasSession.run(randomQuery("Era","3")),
-      genresSession.run(randomQuery("Genre","10")),
-      soundsSession.run(randomQuery("Sound","10"))
+      moodsSession.run(randomQuery("Mood","4")),
+      erasSession.run(randomQuery("Era","4")),
+      genresSession.run(randomQuery("Genre","8")),
+      soundsSession.run(randomQuery("Sound","8"))
     ]);
 
     // Close all sessions
