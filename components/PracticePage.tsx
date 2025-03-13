@@ -24,25 +24,11 @@ interface Question {
   correctAnswers: QuestionOption[];
 }
 
-// Pop art color palette (softer, less bright colors)
-const POP_ART_COLORS = [
-  'rgba(255, 43, 91, 0.8)', // Softer hot pink
-  'rgba(255, 199, 0, 0.8)',  // Softer yellow
-  'rgba(57, 255, 20, 0.75)', // Softer neon green
-  'rgba(0, 255, 255, 0.75)', // Softer cyan
-  'rgba(55, 114, 255, 0.8)', // Softer royal blue
-  'rgba(173, 0, 255, 0.75)', // Softer purple
-  'rgba(242, 34, 255, 0.75)', // Softer magenta
-  'rgba(255, 107, 107, 0.8)', // Softer coral
-  'rgba(76, 201, 240, 0.8)', // Softer blue
-];
 
 export default function PracticePage() {
   const [allOptions, setAllOptions] = useState<QuestionOption[]>([]);
   const [selectedAnswers, setSelectedAnswers] = useState<string[]>([]);
-  const [score, setScore] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [userUpdated, setUserUpdated] = useState(false);
   const [currentView, setCurrentView] = useState<"selection" | "feedback">("selection");
   const [correctAnswers, setCorrectAnswers] = useState<QuestionOption[]>([]);
   const [videoId, setVideoId] = useState("");
@@ -147,8 +133,6 @@ export default function PracticePage() {
       correctCount / correctAnswers.length - 
       incorrectCount / (allOptions.length - correctAnswers.length)
     );
-
-    setScore(questionScore);
 
     // Update user info
     const totalCorrectCount = Math.round(questionScore * 100);
