@@ -304,7 +304,7 @@ export default function DashboardPage() {
 
     // Create genre abstract shapes
     newGenres.forEach(genre => {
-      createPopArtPlanetShape(scene, genre);
+      createPopArtGenreCard(scene, genre);
     });
 
     // Create floating abstract shapes in the background
@@ -313,6 +313,28 @@ export default function DashboardPage() {
     // Animation loop
     const animate = () => {
       if (controlsRef.current) controlsRef.current.update();
+      
+      // Simplified rotation for genre cards only
+      scene.traverse((object) => {
+        if (object.userData && object.userData.type === 'genre') {
+          // Simple clockwise rotation around center
+          const radius = 8; // Fixed radius
+          const rotationSpeed = 0.0001; // Much slower rotation speed
+          
+          // Calculate base angle from current position
+          let currentAngle = Math.atan2(object.position.z, object.position.x);
+          
+          // Update angle (subtract for clockwise rotation)
+          currentAngle -= rotationSpeed * 5; // Adjust multiplier to control speed
+          
+          // Set new position
+          object.position.x = Math.cos(currentAngle) * radius;
+          object.position.z = Math.sin(currentAngle) * radius;
+          
+          // Make card face center
+          object.lookAt(0, object.position.y, 0);
+        }
+      });
       
       // Animate all abstract shapes
       scene.children.forEach((child: THREE.Object3D) => {
@@ -323,9 +345,7 @@ export default function DashboardPage() {
         
         if (child.userData && child.userData.type === 'genre') {
           if (child instanceof THREE.Group) {
-            child.rotation.y += 0.005;
-            
-            // Make child elements float
+            // Keep the floating and color pulsing effects only
             child.children.forEach((element, i) => {
               if (element instanceof THREE.Mesh) {
                 element.position.y = Math.sin(Date.now() * 0.001 + i * 0.5) * 0.2;
@@ -564,232 +584,118 @@ export default function DashboardPage() {
     scene.add(pulsingLight);
   };
 
-  // Create pop art planet shapes for genre
-  const createPopArtPlanetShape = (scene: THREE.Scene, genre: GenreNode) => {
+  // Create pop art genre cards
+  const createPopArtGenreCard = (scene: THREE.Scene, genre: GenreNode) => {
     const [x, y, z] = genre.position;
-    const color = parseInt(genre.color.replace('#', '0x'));
+    const index = parseInt(genre.id) || 0; // Use id for color selection
+    
+    // Calculate angle and radius for circular positioning
+    const radius = Math.sqrt(x*x + z*z); // Get distance from center
+    const angle = Math.atan2(z, x); // Get current angle
     
     // Create a group to hold the genre elements
     const genreGroup = new THREE.Group();
     genreGroup.position.set(x, y, z);
-    genreGroup.userData = { type: 'genre', id: genre.id, name: genre.name };
+    genreGroup.userData = { 
+      type: 'genre', 
+      id: genre.id, 
+      name: genre.name,
+      angle: angle, // Store angle for animation
+      radius: radius // Store radius for animation
+    };
     
-    // // Create pop art texture canvas
-    // const createPopArtTexture = (baseColor: number, style: number) => {
-    //   const canvas = document.createElement('canvas');
-    //   const context = canvas.getContext('2d');
-    //   canvas.width = 512;
-    //   canvas.height = 512;
-      
-    //   if (context) {
-    //     // Convert hex color to RGB
-    //     const r = (baseColor >> 16) & 255;
-    //     const g = (baseColor >> 8) & 255;
-    //     const b = baseColor & 255;
-        
-    //     // Background color
-    //     context.fillStyle = `rgb(${r}, ${g}, ${b})`;
-    //     context.fillRect(0, 0, 512, 512);
-        
-    //     // Apply different pop art patterns based on style
-    //     switch (style) {
-    //       case 0: // Dots pattern
-    //         const dotColor = `rgb(${255-r}, ${255-g}, ${255-b})`;
-    //         context.fillStyle = dotColor;
-            
-    //         for (let i = 0; i < 20; i++) {
-    //           for (let j = 0; j < 20; j++) {
-    //             const size = 10 + Math.random() * 10;
-    //             context.beginPath();
-    //             context.arc(i * 25 + 12, j * 25 + 12, size, 0, Math.PI * 2);
-    //             context.fill();
-    //           }
-    //         }
-    //         break;
-            
-    //       case 1: // Stripes pattern
-    //         const stripeColor = `rgb(${255-r}, ${255-g}, ${255-b})`;
-    //         context.fillStyle = stripeColor;
-            
-    //         for (let i = 0; i < 15; i++) {
-    //           context.fillRect(0, i * 40, 512, 20);
-    //         }
-    //         break;
-            
-    //       case 2: // Comic-style dots
-    //         for (let i = 0; i < 100; i++) {
-    //           const dotSize = 5 + Math.random() * 25;
-    //           const x = Math.random() * 512;
-    //           const y = Math.random() * 512;
-              
-    //           // Random bright colors
-    //           const colors = ['#FF5555', '#55FF55', '#5555FF', '#FFFF55', '#FF55FF', '#55FFFF', '#FFFFFF'];
-    //           context.fillStyle = colors[Math.floor(Math.random() * colors.length)];
-              
-    //           context.beginPath();
-    //           context.arc(x, y, dotSize, 0, Math.PI * 2);
-    //           context.fill();
-    //         }
-    //         break;
-            
-    //       case 3: // Halftone pattern
-    //         const halftoneBg = `rgb(${255-r}, ${255-g}, ${255-b})`;
-    //         context.fillStyle = halftoneBg;
-    //         context.fillRect(0, 0, 512, 512);
-            
-    //         context.fillStyle = `rgb(${r}, ${g}, ${b})`;
-    //         const spacing = 20;
-    //         for (let i = 0; i < 512; i += spacing) {
-    //           for (let j = 0; j < 512; j += spacing) {
-    //             const dist = Math.sqrt(Math.pow(i-256, 2) + Math.pow(j-256, 2));
-    //             const radius = Math.max(0, Math.min(spacing/2, (256-dist)/10));
-                
-    //             context.beginPath();
-    //             context.arc(i, j, radius, 0, Math.PI * 2);
-    //             context.fill();
-    //           }
-    //         }
-    //         break;
-            
-    //       case 4: // Pop art grid
-    //         const gridSize = 4;
-    //         const cellSize = 512 / gridSize;
-            
-    //         const gridColors = [
-    //           `rgb(${r}, ${g}, ${b})`,
-    //           `rgb(${255-r}, ${g}, ${b})`,
-    //           `rgb(${r}, ${255-g}, ${b})`,
-    //           `rgb(${r}, ${g}, ${255-b})`
-    //         ];
-            
-    //         for (let i = 0; i < gridSize; i++) {
-    //           for (let j = 0; j < gridSize; j++) {
-    //             context.fillStyle = gridColors[(i+j) % gridColors.length];
-    //             context.fillRect(i * cellSize, j * cellSize, cellSize, cellSize);
-                
-    //             // Add a pop art element in each cell
-    //             context.fillStyle = '#FFFFFF';
-    //             context.beginPath();
-                
-    //             // Alternate between different shapes
-    //             if ((i+j) % 3 === 0) {
-    //               // Star
-    //               const centerX = i * cellSize + cellSize/2;
-    //               const centerY = j * cellSize + cellSize/2;
-    //               const starRadius = cellSize * 0.3;
-                  
-    //               for (let p = 0; p < 5; p++) {
-    //                 const angle = (p * 4 * Math.PI) / 5;
-    //                 const x = centerX + Math.cos(angle) * starRadius;
-    //                 const y = centerY + Math.sin(angle) * starRadius;
-                    
-    //                 if (p === 0) context.moveTo(x, y);
-    //                 else context.lineTo(x, y);
-    //               }
-    //             } else if ((i+j) % 3 === 1) {
-    //               // Circle
-    //               context.arc(
-    //                 i * cellSize + cellSize/2,
-    //                 j * cellSize + cellSize/2,
-    //                 cellSize * 0.3,
-    //                 0, Math.PI * 2
-    //               );
-    //             } else {
-    //               // Exclamation mark
-    //               const centerX = i * cellSize + cellSize/2;
-    //               const centerY = j * cellSize + cellSize/2;
-                  
-    //               context.fillRect(
-    //                 centerX - cellSize*0.1,
-    //                 centerY - cellSize*0.3,
-    //                 cellSize*0.2,
-    //                 cellSize*0.4
-    //               );
-                  
-    //               context.arc(
-    //                 centerX,
-    //                 centerY + cellSize*0.2,
-    //                 cellSize*0.1,
-    //                 0, Math.PI * 2
-    //               );
-    //             }
-                
-    //             context.fill();
-    //           }
-    //         }
-    //         break;
-    //     }
-    //   }
-      
-    //   const texture = new THREE.CanvasTexture(canvas);
-    //   return texture;
-    // };
-    
-    // Gas giant
-    // Main planet
-    // const texture0 = createPopArtTexture(color, Math.floor(Math.random() * 5)); // Dots texture
-    // const planetMaterial = new THREE.MeshPhongMaterial({
-    //   map: texture0,
-    //   shininess: 100,
-    //   emissive: color,
-    //   emissiveIntensity: 0.2
-    // });
-    
-    // const planet = new THREE.Mesh(
-    //   new THREE.SphereGeometry(3, 32, 32),
-    //   planetMaterial
-    // );
-    // genreGroup.add(planet);
-    
-    // Add text label above the planet (keeping the original label code)
+    // Create billboard card
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
     canvas.width = 512;
-    canvas.height = 128;
-    
+    canvas.height = 384;
+
     if (context) {
-      // Create gradient background
-      const gradient = context.createLinearGradient(0, 0, 512, 0);
-      gradient.addColorStop(0, '#000000');
-      gradient.addColorStop(0.5, genre.color);
-      gradient.addColorStop(1, '#000000');
+      // Vibrant pop art background
+      const colorIndex = index % POP_ART_COLORS.length;
+      const mainColor = POP_ART_COLORS[colorIndex];
+      context.fillStyle = mainColor;
+      context.fillRect(0, 0, 512, 384);
       
-      context.fillStyle = gradient;
-      context.fillRect(0, 0, 512, 128);
+      // Add halftone pattern
+      context.fillStyle = 'rgba(255, 255, 255, 0.3)';
+      const dotSize = 12;
+      const dotSpacing = 24;
       
-      // Add pop art style border
-      context.strokeStyle = genre.color;
-      context.lineWidth = 4;
-      context.strokeRect(4, 4, 504, 120);
+      for (let dotX = 0; dotX < 512; dotX += dotSpacing) {
+        for (let dotY = 0; dotY < 384; dotY += dotSpacing) {
+          if ((dotX + dotY) % 48 < 24) {
+            context.beginPath();
+            context.arc(dotX, dotY, dotSize, 0, Math.PI * 2);
+            context.fill();
+          }
+        }
+      }
       
-      // Add comic style text
-      context.fillStyle = '#FFFFFF';
-      context.font = 'Bold 45px Comic Sans MS, Arial';
+      // Add bold border
+      context.strokeStyle = '#FFFFFF';
+      context.lineWidth = 10;
+      context.strokeRect(10, 10, 492, 364);
+      
+      // IMPROVED TEXT VISIBILITY
+      // First add black outline for contrast
+      context.strokeStyle = '#000000';
+      context.lineWidth = 15;
+      context.font = 'bold 90px Impact'; // Larger text
       context.textAlign = 'center';
       context.textBaseline = 'middle';
       
-      // Draw text with black outline for pop art effect
+      // Handle long genre names
+      const displayGenre = genre.name.length > 15 ? 
+        genre.name.substring(0, 12) + "..." : 
+        genre.name;
+      
+      // Draw text outline first
+      context.strokeText(displayGenre.toUpperCase(), 256, 160);
+      
+      // Then fill with bright yellow for much better visibility
+      context.fillStyle = '#FFFFFF'; // Yellow instead of white
+      context.fillText(displayGenre.toUpperCase(), 256, 160);
+      
+      // Add "GENRE" subtitle for extra pop art style
+      context.font = 'bold 40px Impact';
       context.strokeStyle = '#000000';
-      context.lineWidth = 6;
-      context.strokeText(genre.name, 256, 64);
-      context.fillText(genre.name, 256, 64);
+      context.lineWidth = 8;
+      context.strokeText("GENRE", 256, 240);
+      context.fillStyle = '#FFFFFF';
+      context.fillText("GENRE", 256, 240);
       
       const texture = new THREE.CanvasTexture(canvas);
-      const labelMaterial = new THREE.SpriteMaterial({ map: texture });
-      const label = new THREE.Sprite(labelMaterial);
-      label.scale.set(8, 2, 1);
-      label.position.set(0, 0, 0);
-      label.userData = { type: 'genre', id: genre.id, name: genre.name };
-      genreGroup.add(label);
+      const cardMaterial = new THREE.SpriteMaterial({ map: texture });
+      const card = new THREE.Sprite(cardMaterial);
+      card.scale.set(6, 4.5, 1);
+      
+      // Set user data
+      card.userData = {
+        type: 'genre',
+        id: genre.id,
+        name: genre.name
+      };
+      
+      genreGroup.add(card);
     }
+    
+    // Make the card face the center (0,0,0)
+    genreGroup.lookAt(0, 0, 0);
     
     // Add the genre group to the scene
     scene.add(genreGroup);
     
     // Add a point light with genre color
+    const color = parseInt(genre.color.replace('#', '0x'));
     const light = new THREE.PointLight(color, 1, 10);
     light.position.set(x, y + 1, z);
-    light.userData = { type: 'genreLight' };
+    light.userData = { 
+      type: 'genreLight',
+      genreId: genre.id, // Reference to its genre for animation
+      angle: angle,
+      radius: radius
+    };
     scene.add(light);
   };
 
@@ -1016,7 +922,6 @@ export default function DashboardPage() {
           }
         }
       };
-      
       // Start animation
       updateCamera();
     };
@@ -1044,107 +949,15 @@ export default function DashboardPage() {
             
             // Update state which will trigger scene rebuild
             setMainGenres(genresWithColors);
-            
-            // Start animation loop after scene is likely rebuilt
-            setTimeout(() => {
-              startMainAnimationLoop();
-            }, 100);
           }
         }
       } catch (error) {
         console.error("Error fetching genres:", error);
-        // Still start animation loop even if fetch fails
-        startMainAnimationLoop();
       }
     };
     
     // Start the process with camera animation
     animateCamera();
-  };
-
-  // Start the main animation loop with pop art aesthetic
-  const startMainAnimationLoop = () => {
-    if (!sceneRef.current || !cameraRef.current || !rendererRef.current) return;
-    
-    const scene = sceneRef.current;
-    const camera = cameraRef.current;
-    const renderer = rendererRef.current;
-    
-    // Find the central hub
-    let centralHub: THREE.Object3D | null = null;
-    scene.traverse((object) => {
-      if (object.userData && object.userData.type === 'centralHub') {
-        centralHub = object;
-      }
-    });
-    
-    // Animation loop
-    const animate = () => {
-      if (controlsRef.current) controlsRef.current.update();
-      
-      // Rotate and animate central hub
-      if (centralHub) {
-        centralHub.rotation.y += 0.005;
-        
-        centralHub.children.forEach((child) => {
-          if (child instanceof THREE.Mesh) {
-            child.rotation.x += 0.005;
-            child.rotation.z += 0.01;
-            
-            // If it's a torus, do special animation
-            if (child.geometry instanceof THREE.TorusGeometry) {
-              child.scale.set(
-                1 + Math.sin(Date.now() * 0.001) * 0.1,
-                1 + Math.sin(Date.now() * 0.001) * 0.1,
-                1 + Math.sin(Date.now() * 0.001) * 0.1
-              );
-            }
-          }
-        });
-      }
-      
-      // Animate genre objects
-      scene.children.forEach((child: THREE.Object3D) => {
-        if (child.userData && child.userData.type === 'genre') {
-          if (child instanceof THREE.Group) {
-            child.rotation.y += 0.005;
-            
-            child.children.forEach((element, i) => {
-              if (element instanceof THREE.Mesh) {
-                element.position.y = Math.sin(Date.now() * 0.001 + i * 0.5) * 0.2;
-                
-                // Animate materials
-                if (element.material instanceof THREE.MeshPhongMaterial) {
-                  element.material.emissiveIntensity = 0.3 + Math.sin(Date.now() * 0.002 + i) * 0.1;
-                }
-              }
-            });
-          }
-        }
-        
-        // Animate abstract shapes
-        if (child.userData && child.userData.type === 'abstractShape') {
-          child.rotation.y += 0.002;
-          child.rotation.x += 0.001;
-        }
-        
-        // Animate point lights
-        if (child.userData && child.userData.type === 'genreLight' && child instanceof THREE.PointLight) {
-          child.intensity = 0.7 + Math.sin(Date.now() * 0.002) * 0.3;
-        }
-        
-        // Animate hub light
-        if (child.userData && child.userData.type === 'hubLight' && child instanceof THREE.PointLight) {
-          child.intensity = 1 + Math.sin(Date.now() * 0.003) * 0.5;
-        }
-      });
-      
-      renderer.render(scene, camera);
-      animationFrameRef.current = requestAnimationFrame(animate);
-    };
-    
-    // Start the animation loop
-    animationFrameRef.current = requestAnimationFrame(animate);
   };
 
   // Create pop art style album art display - simplified, larger version
@@ -1838,16 +1651,6 @@ export default function DashboardPage() {
         infoContext.fillText(`ALBUM: ${album.toUpperCase()}`, 800, 370);
       }
       
-      // // Add genre info if available
-      // if (song.genres && Array.isArray(song.genres) && song.genres.length > 0) {
-      //   infoContext.font = 'bold 40px Arial';
-      //   infoContext.fillStyle = '#FFFFFF';
-        
-      //   // Display up to 3 genres
-      //   const displayGenres = song.genres.slice(0, 3).join(' • ').toUpperCase();
-      //   infoContext.fillText(displayGenres, 800, 450);
-      // }
-      
       // Add decorative elements
       infoContext.shadowBlur = 0;
       
@@ -2338,9 +2141,9 @@ export default function DashboardPage() {
           <Home className="h-4 w-4 mr-1" />
           Main
         </Button>
-        <span className="text-yellow-400 font-bold hidden md:inline-block">{userData.email}</span>
+        <span className="text-sm font-medium text-cyan-400 hover:text-pink-400 transition-colors">{userData.email}</span>
         <Button
-          className="bg-pink-500 hover:bg-pink-600 text-black font-bold border-2 border-white"
+          className="bg-pink-500 hover:bg-pink-600 text-black font-bold" 
           size="sm"
           onClick={() => {
             localStorage.removeItem("token");
