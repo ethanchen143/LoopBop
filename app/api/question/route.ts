@@ -83,8 +83,8 @@ export async function GET(request: NextRequest) {
     const erasSession = getSession();
 
     const [erasResult, genresResult] = await Promise.all([
-      erasSession.run(eraQuery("Era", "4")),
-      genresSession.run(genreQuery("Genre", "8")),
+      erasSession.run(eraQuery("Era", "2")),
+      genresSession.run(genreQuery("Genre", "6")),
     ]);
 
     // Close all sessions

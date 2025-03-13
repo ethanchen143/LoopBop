@@ -156,7 +156,7 @@ export default function LandingPage() {
           </div>
         </section> */}
         {/* Testimonials/Stats Section */}
-        <section className="py-16 relative bg-gradient-to-b from-black to-indigo-900/30">
+        <section className="py-16 relative from-black to-indigo-900/30">
           <div className="container mx-auto px-4 md:px-6 text-center">
             <h2 className="text-3xl font-bold mb-12 text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-pink-500">
               JOIN THE LOOPBOP COMMUNITY
