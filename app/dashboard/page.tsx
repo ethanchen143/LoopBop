@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { X, Music, Trophy, Search, Mic, Eye, EyeOff, Home } from 'lucide-react';
+import { X, Music, Trophy, Search, Home } from 'lucide-react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 
@@ -31,6 +31,14 @@ interface GenreNode {
   position: [number, number, number];
 }
 
+declare global {
+  interface Window {
+    genreCards: THREE.Object3D[];
+    isOrbiting: boolean;
+    orbitAnimationId: number;
+  }
+}
+
 interface SongNode {
   id: string;
   title: string;
@@ -40,6 +48,26 @@ interface SongNode {
   youtube?: string;
   genres: string[];
   position: [number, number, number];
+}
+
+interface SongDetails {
+  name?: string;
+  title?: string;
+  artist?: string;
+  album?: string;
+  pic?: string;
+  youtube?: string;
+  youtubeId?: string;
+  genres?: string[];
+}
+
+interface SongData {
+  name?: string;
+  artist?: string;
+  album?: string;
+  pic?: string;
+  youtube?: string;
+  genres?: string[];
 }
 
 // Color palette for pop art aesthetic
@@ -81,12 +109,10 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [currentView, setCurrentView] = useState<"genres" | "songs" | "related">("genres");
-  const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
   const [selectedSong, setSelectedSong] = useState<string | null>(null);
-  const [genres, setGenres] = useState<GenreNode[]>([]);
   const [songs, setSongs] = useState<SongNode[]>([]);
   const [mainGenres, setMainGenres] = useState<{id: string, name: string, color: string}[]>([]);
-  const [songDetails, setSongDetails] = useState<any>(null);
+  const [songDetails, setSongDetails] = useState<SongDetails | null>(null);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [showExplore, setShowExplore] = useState(false);
 
@@ -100,6 +126,7 @@ export default function DashboardPage() {
   
   // Window reference for animations
   useEffect(() => {
+    // this does nothing, just to satisfy unused variable requirement
     if (typeof window !== 'undefined' && !window.floatingAnimations) {
       window.floatingAnimations = [];
     }
@@ -143,7 +170,7 @@ export default function DashboardPage() {
           const data = await response.json();
           if (data.results && Array.isArray(data.results)) {
             // Map the results to include pop art colors and IDs
-            const genresWithColors = data.results.map((genre: any, index: number) => ({
+            const genresWithColors = data.results.map((genre: { name: string }, index: number) => ({
               id: index.toString(),
               name: genre.name,
               color: POP_ART_COLORS[index % POP_ART_COLORS.length]
@@ -197,142 +224,6 @@ export default function DashboardPage() {
     };
     fetchData();
   }, [router]);
-
-  // handle Click
-  useEffect(() => {
-    if (!mountRef.current || loading) return;
-    
-    // Setup raycaster for interaction
-    const raycaster = new THREE.Raycaster();
-    const mouse = new THREE.Vector2();
-    const renderer = rendererRef.current;
-    
-    // Event listener for mouse clicks
-    const handleClick = (event: MouseEvent) => {
-      if (!sceneRef.current || !cameraRef.current || !renderer) return;
-      
-      // Calculate mouse position in normalized device coordinates
-      const rect = renderer.domElement.getBoundingClientRect();
-      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-      // Update the picking ray with the camera and mouse position
-      raycaster.setFromCamera(mouse, cameraRef.current);
-
-      // Calculate objects intersecting the picking ray with recursive flag to check children
-      const intersects = raycaster.intersectObjects(sceneRef.current.children, true);
-
-      if (intersects.length > 0) {
-        // Find the first object with relevant userData
-        const findObjectWithUserData = (object) => {
-          // Go up the parent chain to find userData with type
-          let current = object;
-          while (current) {
-            if (current.userData && current.userData.type) {
-              return current;
-            }
-            current = current.parent;
-          }
-          return object;
-        };
-        
-        const object = findObjectWithUserData(intersects[0].object);
-        const userData = object.userData;
-        
-        if (userData) {
-          console.log("Clicked object:", userData);
-          
-          // Handle different object types
-          if (userData.type === 'genre') {
-            console.log(`Clicked on genre: ${userData.name}`);
-            setSelectedGenre(userData.id);
-            fetchSongsForGenre(userData.name);
-          } 
-          else if (userData.type === 'song') {
-            console.log(`Clicked on song with YouTube: ${userData.youtube}`);
-            setSelectedSong(userData.id);
-            
-            // Clear scene immediately when transitioning to related view
-            if (currentView === "songs") {
-              // Clear current songs view objects
-              const objectsToRemove = [];
-              sceneRef.current.traverse((obj) => {
-                if (obj.userData && 
-                    (obj.userData.type === 'song' || 
-                    obj.userData.type === 'songStage')) {
-                  objectsToRemove.push(obj);
-                }
-              });
-              
-              objectsToRemove.forEach(obj => {
-                sceneRef.current?.remove(obj);
-                if (obj instanceof THREE.Mesh) {
-                  if (obj.geometry) obj.geometry.dispose();
-                  if (obj.material) {
-                    if (Array.isArray(obj.material)) {
-                      obj.material.forEach(mat => mat.dispose());
-                    } else {
-                      obj.material.dispose();
-                    }
-                  }
-                }
-              });
-            }
-            
-            const youtubeUrl = userData.youtube;
-
-            if (youtubeUrl) {
-              // Set initial song details with the YouTube ID to prevent "video unavailable"
-              setSongDetails({
-                name: userData.title || "Loading...",
-                artist: userData.artist || "Loading...",
-                youtube: youtubeUrl,
-              });
-              
-              // Then fetch the full details
-              fetchSongDetails(youtubeUrl);
-            }
-          } 
-          else if (userData.type === 'youtubePreview') {
-            console.log('Clicked on YouTube preview');
-            // Open the modal with YouTube player
-            if (userData.youtubeId) {
-              setSongDetails(prev => ({
-                ...prev,
-                youtube: userData.youtubeId
-              }));
-            }
-          }
-          else if (userData.type === 'relatedGenre') {
-            console.log(`Clicked on related genre: ${userData.name}`);
-            setSongDetails(null); // Close the current song details
-            setCurrentView("songs"); // Change back to songs view
-            fetchSongsForGenre(userData.name);
-          }
-          else if (userData.type === 'backButton' && userData.action === 'returnToGenres') {
-            console.log('Clicked on back to genres button');
-            returnToMainView();
-          }
-        }
-      }
-    };
-
-    // Add click event listener
-    const element = renderer?.domElement;
-    if (element) {
-      // Remove any existing listeners first to prevent duplicates
-      element.removeEventListener('click', handleClick);
-      element.addEventListener('click', handleClick);
-    }
-
-    // Cleanup function
-    return () => {
-      if (element) {
-        element.removeEventListener('click', handleClick);
-      }
-    };
-  }, [loading, sceneRef.current, cameraRef.current, rendererRef.current]);
-
 
   const MAIN_VIEW_CAMERA_POSITION = new THREE.Vector3(0, 15, 25);
 
@@ -410,8 +301,6 @@ export default function DashboardPage() {
         position: [x, 0, z] // Place at various heights for 3D effect
       });
     });
-    
-    setGenres(newGenres);
 
     // Create genre abstract shapes
     newGenres.forEach(genre => {
@@ -684,9 +573,6 @@ export default function DashboardPage() {
     const genreGroup = new THREE.Group();
     genreGroup.position.set(x, y, z);
     genreGroup.userData = { type: 'genre', id: genre.id, name: genre.name };
-    
-    // Create different planet shapes based on genre index to make them unique
-    const genreId = parseInt(genre.id);
     
     // // Create pop art texture canvas
     // const createPopArtTexture = (baseColor: number, style: number) => {
@@ -1083,7 +969,6 @@ export default function DashboardPage() {
     
     // Set current view back to genres
     setCurrentView("genres");
-    setSelectedGenre(null);
     setSelectedSong(null);
     
     // Disable controls during transition to prevent interference
@@ -1111,7 +996,7 @@ export default function DashboardPage() {
         const progress = Math.min(elapsed / duration, 1);
         
         // Smooth easing
-        const easeOutCubic = (x) => 1 - Math.pow(1 - x, 3);
+        const easeOutCubic = (x: number) => 1 - Math.pow(1 - x, 3);
         const easedProgress = easeOutCubic(progress);
         
         if (cameraRef.current) {
@@ -1136,7 +1021,8 @@ export default function DashboardPage() {
       updateCamera();
     };
     
-    // Define data fetching and scene rebuilding as a separate function
+
+
     const fetchGenresAndCreateScene = async () => {
       try {
         const token = localStorage.getItem("token");
@@ -1150,7 +1036,7 @@ export default function DashboardPage() {
           const data = await response.json();
           if (data.results && Array.isArray(data.results)) {
             // Map the results to include pop art colors and IDs
-            const genresWithColors = data.results.map((genre, index) => ({
+            const genresWithColors = data.results.map((genre:GenreNode, index:number) => ({
               id: index.toString(),
               name: genre.name,
               color: POP_ART_COLORS[index % POP_ART_COLORS.length]
@@ -1200,7 +1086,7 @@ export default function DashboardPage() {
       if (centralHub) {
         centralHub.rotation.y += 0.005;
         
-        centralHub.children.forEach((child, i) => {
+        centralHub.children.forEach((child) => {
           if (child instanceof THREE.Mesh) {
             child.rotation.x += 0.005;
             child.rotation.z += 0.01;
@@ -1326,38 +1212,6 @@ export default function DashboardPage() {
           
           context.fillStyle = gradient;
           context.fillRect(0, 0, 1024, 256);
-          
-          // Add text
-          // context.fillStyle = '#FFFFFF';
-          // context.font = 'bold 52px Impact, Charcoal, sans-serif';
-          // context.textAlign = 'center';
-          // context.textBaseline = 'middle';
-          
-          // // Song title - truncate if too long
-          // const title = song.title || "Unknown";
-          // const displayTitle = title.length > 25 ? title.substring(0, 22) + "..." : title;
-          // context.fillText(displayTitle.toUpperCase(), 512, 70);
-          
-          // // Artist name
-          // const artist = song.artist || "Unknown Artist";
-          // const displayArtist = artist.length > 30 ? artist.substring(0, 27) + "..." : artist;
-          // context.font = 'bold 42px Arial';
-          // context.fillText(displayArtist.toUpperCase(), 512, 160);
-          
-          // const texture = new THREE.CanvasTexture(canvas);
-          // const labelMaterial = new THREE.SpriteMaterial({ map: texture });
-          // const label = new THREE.Sprite(labelMaterial);
-          // label.scale.set(11, 2.75, 1); 
-          // label.position.set(x, y + 10.5, z); 
-          // label.userData = {
-          //   type: 'song',
-          //   id: song.id,
-          //   title: song.title,
-          //   artist: song.artist,
-          //   youtube: song.youtube
-          // };
-          
-          // sceneRef.current?.add(label);
         }
         
         // Add subtle floating animation
@@ -1376,7 +1230,7 @@ export default function DashboardPage() {
             frame.rotation.y = albumCover.rotation.y;
           }
           
-          const id = setTimeout(animateAlbum, 16);
+          const id: number = window.setTimeout(animateAlbum, 16);
           if (typeof window !== 'undefined') {
             if (!window.floatingAnimations) window.floatingAnimations = [];
             window.floatingAnimations.push(id);
@@ -1389,7 +1243,6 @@ export default function DashboardPage() {
       undefined,
       (error) => {
         console.error('Error loading album art:', error);
-        createPopArtFallbackObject(song, x, y, z);
       }
     );
   };
@@ -1638,7 +1491,7 @@ export default function DashboardPage() {
           
           backButton.scale.set(10 * scale, 2.5 * scale, 1);
           
-          const id = setTimeout(animate, 50);
+          const id: number = window.setTimeout(animate, 50);
           if (typeof window !== 'undefined') {
             if (!window.floatingAnimations) window.floatingAnimations = [];
             window.floatingAnimations.push(id);
@@ -1677,26 +1530,19 @@ export default function DashboardPage() {
         // Create the song display
         if (song.albumPic) {
           createPopArtAlbumDisplay(song, x, y, z);
-        } else {
-          createPopArtFallbackObject(song, x, y, z);
         }
       });
-
-
-      // Move camera to view songs - adjust camera position based on song count
-      const rows = Math.ceil(songNodes.length / songsPerRow);
-      const cameraZ = Math.max(25, rows * 8); // Adjust camera distance based on number of rows
-      animateCameraToSongsView(cameraZ);
+      animateCameraToSongsView();
   };
 
   // Add this comprehensive cleanup function
-  const clearSceneForViewTransition = (targetView) => {
+  const clearSceneForViewTransition = (targetView:string) => {
     if (!sceneRef.current) return;
     
     console.log(`Clearing scene for transition to: ${targetView}`);
     
     // Define which types to remove based on the target view
-    let typesToRemove = [];
+    let typesToRemove: string[] = [];
     
     if (targetView === "genres") {
       // When going to genres view, remove everything except background elements
@@ -1710,7 +1556,7 @@ export default function DashboardPage() {
     }
     
     // Find objects to remove
-    const objectsToRemove = [];
+    const objectsToRemove: THREE.Object3D[] = [];
     sceneRef.current.traverse((object) => {
       if (object.userData && object.userData.type && typesToRemove.includes(object.userData.type)) {
         objectsToRemove.push(object);
@@ -1741,7 +1587,7 @@ export default function DashboardPage() {
     console.log(`Removed ${objectsToRemove.length} objects from scene`);
   };
 
-  const fetchSongsForGenre = async (genreName) => {
+  const fetchSongsForGenre = async (genreName:string) => {
     try {
       console.log(`Fetching songs for genre: ${genreName}`);
       const token = localStorage.getItem("token");
@@ -1752,7 +1598,6 @@ export default function DashboardPage() {
       
       // Update state
       setCurrentView("songs");
-      setSelectedGenre(genreName);
       setSongDetails(null); // Make sure no song details are showing
       
       const response = await fetch(`/api/journey?mode=songs&arg=${encodeURIComponent(genreName)}`, {
@@ -1781,7 +1626,7 @@ export default function DashboardPage() {
           }
           
           // Transform API response into SongNode objects
-          const songNodes = songsList.map((song, index) => {
+          const songNodes = songsList.map((song: SongDetails, index:number) => {
             const row = Math.floor(index / 4);
             const col = index % 4;
             const x = (col - 1.5) * 6;
@@ -1813,7 +1658,7 @@ export default function DashboardPage() {
     }
   };
 
-  const fetchSongDetails = async (youtubeUrl) => {
+  const fetchSongDetails = async (youtubeUrl:string) => {
     try {
       console.log(`Fetching song details for YouTube: ${youtubeUrl}`);
   
@@ -1842,8 +1687,8 @@ export default function DashboardPage() {
         youtube: youtubeUrl,
       }));
   
-      // Create YouTube preview immediately
-      createYoutubePreview(youtubeUrl, null, true);
+      // // Create YouTube preview immediately
+      // createYoutubePreview(youtubeUrl, null, true);
   
       // Then fetch the actual data
       const response = await fetch(`/api/journey?mode=song&arg=${encodeURIComponent(youtubeUrl)}`, {
@@ -1867,7 +1712,7 @@ export default function DashboardPage() {
           });
           
           // Update YouTube preview with real data
-          createYoutubePreview(youtubeUrl, songData, false);
+          createYoutubePreview(youtubeUrl, songData as SongData, false);
         }
       } else {
         console.error("Error fetching song details");
@@ -1887,7 +1732,7 @@ export default function DashboardPage() {
 
   const YOUTUBE_CAMERA_POSITION = new THREE.Vector3(0, 10, 30);
 
-  const createYoutubePreview = (youtubeId: string, songData?: any, isInitialRender: boolean = false) => {
+  const createYoutubePreview = (youtubeId: string, songData: SongData, isInitialRender: boolean = false) => {
     if (!sceneRef.current || !cameraRef.current) return;
   
     console.log("Creating YouTube preview for ID:", youtubeId);
@@ -1896,7 +1741,7 @@ export default function DashboardPage() {
     // Only do cleanup when updating an existing preview
     if (!isInitialRender) {
       // Just remove existing YouTube and decoration elements
-      const objectsToRemove = [];
+      const objectsToRemove: THREE.Object3D[] = [];
       sceneRef.current.traverse((object) => {
         if (object.userData && 
           (object.userData.type === 'youtubePreview' || 
@@ -1921,17 +1766,9 @@ export default function DashboardPage() {
     }
   
     // Create a detailed song info card at the top - use fallback data if songData is not available
-    const song = songData || songs.find(s => s.id === selectedSong) || {
-      title: "Loading Song...",
-      name: "Loading Song...",
-      artist: "Please wait",
-      album: "",
-      pic: "",
-      youtube: youtubeId ? `https://youtube.com/watch?v=${youtubeId}` : "",
-      youtubeId: youtubeId
-    };
+    const song = songData
     
-    const title = song?.title || song?.name || "Loading Song...";
+    const title = song.name || "Loading Song...";
     const artist = song?.artist || "Please wait";
     const album = song?.album || "";
     
@@ -2135,7 +1972,7 @@ export default function DashboardPage() {
   };
 
   // Create related genre cards that orbit clockwise
-  const createOrbitingGenreShapes = (genres) => {
+  const createOrbitingGenreShapes = (genres:string[]) => {
     if (!sceneRef.current || !Array.isArray(genres)) return;
     
     const scene = sceneRef.current;
@@ -2147,7 +1984,7 @@ export default function DashboardPage() {
     }
     
     // Only handle relatedGenre objects since YouTube and song views are handled separately
-    const objectsToRemove = [];
+    const objectsToRemove: THREE.Object3D[] = [];
     scene.traverse((object) => {
       if (object.userData && object.userData.type === 'relatedGenre') {
         objectsToRemove.push(object);
@@ -2315,14 +2152,141 @@ export default function DashboardPage() {
     window.floatingAnimations.push(window.orbitAnimationId);
   };
 
-  // Add this to your component's cleanup function
-  const cleanupOrbitAnimation = () => {
-    if (window.orbitAnimationId) {
-      cancelAnimationFrame(window.orbitAnimationId);
-      window.orbitAnimationId = null;
-      window.isOrbiting = false;
+  // handle Click
+  useEffect(() => {
+    if (!mountRef.current || loading) return;
+    
+    // Setup raycaster for interaction
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    const renderer = rendererRef.current;
+    
+    // Event listener for mouse clicks
+    const handleClick = (event: MouseEvent) => {
+      if (!sceneRef.current || !cameraRef.current || !renderer) return;
+      
+      // Calculate mouse position in normalized device coordinates
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      // Update the picking ray with the camera and mouse position
+      raycaster.setFromCamera(mouse, cameraRef.current);
+
+      // Calculate objects intersecting the picking ray with recursive flag to check children
+      const intersects = raycaster.intersectObjects(sceneRef.current.children, true);
+
+      if (intersects.length > 0) {
+        // Find the first object with relevant userData
+        const findObjectWithUserData = (object: THREE.Object3D): THREE.Object3D => {
+          let current: THREE.Object3D | null = object;
+          
+          while (current) {
+            if (current.userData && current.userData.type) {
+              return current;
+            }
+            current = current.parent;
+          }
+          
+          return object;
+        };
+
+        const object = findObjectWithUserData(intersects[0].object);
+        const userData = object.userData;
+        
+        if (userData) {
+          console.log("Clicked object:", userData);
+          
+          // Handle different object types
+          if (userData.type === 'genre') {
+            console.log(`Clicked on genre: ${userData.name}`);
+            fetchSongsForGenre(userData.name);
+          } 
+          else if (userData.type === 'song') {
+            console.log(`Clicked on song with YouTube: ${userData.youtube}`);
+            setSelectedSong(userData.id);
+            
+            // Clear scene immediately when transitioning to related view
+            
+            if (currentView === "songs") {
+              // Clear current songs view objects
+              const objectsToRemove: THREE.Object3D[] = [];
+              sceneRef.current.traverse((obj) => {
+                if (obj.userData && 
+                    (obj.userData.type === 'song' || 
+                    obj.userData.type === 'songStage')) {
+                  objectsToRemove.push(obj);
+                }
+              });
+              
+              objectsToRemove.forEach(obj => {
+                sceneRef.current?.remove(obj);
+                if (obj instanceof THREE.Mesh) {
+                  if (obj.geometry) obj.geometry.dispose();
+                  if (obj.material) {
+                    if (Array.isArray(obj.material)) {
+                      obj.material.forEach(mat => mat.dispose());
+                    } else {
+                      obj.material.dispose();
+                    }
+                  }
+                }
+              });
+            }
+            
+            const youtubeUrl = userData.youtube;
+
+            if (youtubeUrl) {
+              // Set initial song details with the YouTube ID to prevent "video unavailable"
+              setSongDetails({
+                name: userData.title || "Loading...",
+                artist: userData.artist || "Loading...",
+                youtube: youtubeUrl,
+              });
+              
+              // Then fetch the full details
+              fetchSongDetails(youtubeUrl);
+            }
+          } 
+          else if (userData.type === 'youtubePreview') {
+            console.log('Clicked on YouTube preview');
+            // Open the modal with YouTube player
+            if (userData.youtubeId) {
+              setSongDetails(prev => ({
+                ...prev,
+                youtube: userData.youtubeId
+              }));
+            }
+          }
+          else if (userData.type === 'relatedGenre') {
+            console.log(`Clicked on related genre: ${userData.name}`);
+            setSongDetails(null); // Close the current song details
+            setCurrentView("songs"); // Change back to songs view
+            fetchSongsForGenre(userData.name);
+          }
+          else if (userData.type === 'backButton' && userData.action === 'returnToGenres') {
+            console.log('Clicked on back to genres button');
+            returnToMainView();
+          }
+        }
+      }
+    };
+
+    // Add click event listener
+    const element = renderer?.domElement;
+    if (element) {
+      // Remove any existing listeners first to prevent duplicates
+      element.removeEventListener('click', handleClick);
+      element.addEventListener('click', handleClick);
     }
-  };
+
+    // Cleanup function
+    return () => {
+      if (element) {
+        element.removeEventListener('click', handleClick);
+      }
+    };
+  }, [loading, sceneRef.current, cameraRef.current, rendererRef.current,currentView,fetchSongDetails, fetchSongsForGenre, returnToMainView]);
 
   // Display loading and error states
   if (loading) {
