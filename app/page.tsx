@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { CheckCircle, Music, Headphones, Zap } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import dotenv from 'dotenv';
+dotenv.config();
 
 export default function LandingPage() {
   const router = useRouter();

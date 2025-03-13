@@ -61,28 +61,6 @@ export async function GET(request:NextRequest) {
           RETURN collect({ name: artist.name, pic: artist.pic, description: COALESCE(artist.description, "No description available.") }) AS results
         `;
         break;
-      case "Mood":
-        query = `
-          MATCH (m:Mood)
-          WHERE toLower(m.tag) CONTAINS $search
-          WITH m
-          ORDER BY m.tag
-          SKIP $skip
-          LIMIT $limit
-          RETURN collect({ name: m.tag, pic: m.pic, description: COALESCE(m.description, "No description available.") }) AS results
-        `;
-        break;
-      case "Era":
-        query = `
-          MATCH (e:Era)
-          WHERE toLower(e.tag) CONTAINS $search
-          WITH e
-          ORDER BY e.tag
-          SKIP $skip
-          LIMIT $limit
-          RETURN collect({ name: e.tag, pic: e.pic, description: COALESCE(e.description, "No description available.") }) AS results
-        `;
-        break;
       case "Genre":
         query = `
           MATCH (g:Genre)
@@ -92,17 +70,6 @@ export async function GET(request:NextRequest) {
           SKIP $skip
           LIMIT $limit
           RETURN collect({ name: g.tag, pic: g.pic, description: COALESCE(g.description, "No description available.") }) AS results
-        `;
-        break;
-      case "Sound":
-        query = `
-          MATCH (s:Sound)
-          WHERE toLower(s.tag) CONTAINS $search
-          WITH s
-          ORDER BY s.tag
-          SKIP $skip
-          LIMIT $limit
-          RETURN collect({ name: s.tag, pic: s.pic, description: COALESCE(s.description, "No description available.") }) AS results
         `;
         break;
       default:

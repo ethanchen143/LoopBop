@@ -20,6 +20,7 @@
     "bcryptjs": "^2.4.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dotenv": "^16.4.7",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.469.0",
     "mongoose": "^8.9.2",
@@ -30,7 +31,8 @@
     "react-youtube": "^10.1.0",
     "tailwind-merge": "^2.6.0",
     "tailwind-variants": "^0.3.0",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "three": "^0.174.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

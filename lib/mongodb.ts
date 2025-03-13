@@ -13,8 +13,8 @@ export async function connectToDatabase(): Promise<mongoose.Connection> {
     const opts = {
       bufferCommands: false,
     };
-
-    global.mongoose.promise = mongoose.connect(process.env.MONGODB_URI!, opts).then((mongoose) => mongoose.connection);
+    console.log(process.env.MONGO_URI)
+    global.mongoose.promise = mongoose.connect(process.env.MONGO_URI!, opts).then((mongoose) => mongoose.connection);
   }
 
   global.mongoose.conn = await global.mongoose.promise;
