@@ -8,7 +8,7 @@ const POP_ART_COLORS: string[] = [
   '#FF2B5B', // Hot pink
   '#FF3864', // Coral red
   '#FFC700', // Bright yellow
-  '#39FF14', // Neon green
+  // '#39FF14', // Neon green
   '#00FFFF', // Cyan
   '#36DBFF', // Bright blue
   '#3772FF', // Royal blue

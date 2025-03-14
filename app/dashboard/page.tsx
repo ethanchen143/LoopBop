@@ -66,7 +66,7 @@ const POP_ART_COLORS = [
   '#FF3864', // Coral red
   '#FF5F5F', // Salmon
   '#FFC700', // Bright yellow
-  '#39FF14', // Neon green
+  // '#39FF14', // Neon green
   '#00FFFF', // Cyan
   '#36DBFF', // Bright blue
   '#3772FF', // Royal blue
@@ -93,8 +93,7 @@ export default function DashboardPage() {
     correct_count: 0,
   });
 
-  const [practiceMode, setPracticeMode] = useState('easy');
-
+  const [practiceMode, setPracticeMode] = useState('hard');
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -103,7 +102,7 @@ export default function DashboardPage() {
   const [songs, setSongs] = useState<SongNode[]>([]);
   const [mainGenres, setMainGenres] = useState<{id: string, name: string, color: string}[]>([]);
   const [songDetails, setSongDetails] = useState<SongDetails | null>(null);
-  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(true);
   const [showExplore, setShowExplore] = useState(false);
 
   // Canvas refs
@@ -113,6 +112,10 @@ export default function DashboardPage() {
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+
+  const MAIN_VIEW_CAMERA_POSITION = new THREE.Vector3(0, 20, 25);
+  const ALBUM_VIEW_TARGET_POSITION = new THREE.Vector3(0, 15, 30);
+  const YOUTUBE_CAMERA_POSITION = new THREE.Vector3(0, 15, 30);
   
   // Window reference for animations
   useEffect(() => {
@@ -124,7 +127,6 @@ export default function DashboardPage() {
 
   const extractYoutubeId = (url: string) => {
     if (!url) return null;
-    
     // Handle various YouTube URL formats
     const patterns = [
       /(?:https?:\/\/)?(?:www\.)?youtu\.be\/([^\/\?\&]+)/i,
@@ -132,14 +134,12 @@ export default function DashboardPage() {
       /(?:https?:\/\/)?(?:www\.)?youtube\.com\/embed\/([^\/\?\&]+)/i,
       /(?:https?:\/\/)?(?:www\.)?youtube\.com\/v\/([^\/\?\&]+)/i
     ];
-    
     for (const pattern of patterns) {
       const match = url.match(pattern);
       if (match && match[1] && match[1].length === 11) {
         return match[1];
       }
     }
-    
     const regExp = /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=)([^#\&\?]*).*/;
     const match = url.match(regExp);
     return (match && match[2] && match[2].length === 11) ? match[2] : null;
@@ -215,8 +215,6 @@ export default function DashboardPage() {
     fetchData();
   }, [router]);
 
-  const MAIN_VIEW_CAMERA_POSITION = new THREE.Vector3(0, 15, 25);
-
   // Initialize 3D scene with abstract pop art aesthetic
   useEffect(() => {
     if (!mountRef.current || loading || mainGenres.length === 0) return;
@@ -273,9 +271,6 @@ export default function DashboardPage() {
     controls.maxDistance = 60;
     controlsRef.current = controls;
 
-    // Create abstract central hub element
-    createCentralHub(scene);
-
     // Create genre nodes as abstract geometric shapes
     const newGenres: GenreNode[] = [];
     const radius = 12; // Larger radius for more spread out arrangement
@@ -288,7 +283,7 @@ export default function DashboardPage() {
         id: genre.id,
         name: genre.name,
         color: genre.color,
-        position: [x, 0, z] // Place at various heights for 3D effect
+        position: [x, 10, z] // Place at various heights for 3D effect
       });
     });
 
@@ -300,29 +295,14 @@ export default function DashboardPage() {
     // Create floating abstract shapes in the background
     createFloatingBackgroundShapes(scene);
 
-    // Animation loop
     const animate = () => {
       if (controlsRef.current) controlsRef.current.update();
       
-      // Simplified rotation for genre cards only
-      scene.traverse((object) => {
-        if (object.userData && object.userData.type === 'genre') {
-          // Simple clockwise rotation around center
-          const radius = 8; // Fixed radius
-          const rotationSpeed = 0.0001; // Much slower rotation speed
-          
-          // Calculate base angle from current position
-          let currentAngle = Math.atan2(object.position.z, object.position.x);
-          
-          // Update angle (subtract for clockwise rotation)
-          currentAngle -= rotationSpeed * 5; // Adjust multiplier to control speed
-          
-          // Set new position
-          object.position.x = Math.cos(currentAngle) * radius;
-          object.position.z = Math.sin(currentAngle) * radius;
-          
-          // Make card face center
-          object.lookAt(0, object.position.y, 0);
+      // Find all genre cards in the scene
+      const genreCards: THREE.Sprite[] = [];
+      scene.traverse((object: THREE.Object3D) => {
+        if (object.userData && object.userData.type === 'genreCard') {
+          genreCards.push(object as THREE.Sprite);
         }
       });
       
@@ -332,42 +312,172 @@ export default function DashboardPage() {
           child.rotation.x += 0.001;
           child.rotation.y += 0.002;
         }
+      });
+      
+      // Animate individual genre cards
+      genreCards.forEach((card: THREE.Sprite) => {
+        // Get the parent group of the card
+        const group = card.parent as THREE.Group;
+        if (!group) return;
         
-        if (child.userData && child.userData.type === 'genre') {
-          if (child instanceof THREE.Group) {
-            // Keep the floating and color pulsing effects only
-            child.children.forEach((element, i) => {
-              if (element instanceof THREE.Mesh) {
-                element.position.y = Math.sin(Date.now() * 0.001 + i * 0.5) * 0.2;
+        // Extract rotation information from group's userData
+        const radius = group.userData.radius || 10;
+        // Get current angle (not initial angle)
+        const currentAngle = group.userData.currentAngle || group.userData.angle || 0;
+        const rotationSpeed = group.userData.rotationSpeed || 0.001;
+        
+        // Calculate new angle by incrementing from current angle
+        // This way speed doesn't increase with time
+        const newAngle = currentAngle - rotationSpeed;
+        
+        // Calculate new position
+        const newX = Math.cos(newAngle) * radius;
+        const newZ = Math.sin(newAngle) * radius;
+        
+        // Update group position
+        group.position.x = newX;
+        group.position.z = newZ;
+        
+        // Make card continue to face the center
+        group.lookAt(0, 0, 0);
+        
+        // Store the updated angle in the userData for next frame
+        group.userData.currentAngle = newAngle;
+        
+        // Update lights that correspond to this card
+        scene.children.forEach((child: THREE.Object3D) => {
+          if (child.userData && 
+              child.userData.type === 'genreLight' && 
+              child.userData.genreId === card.userData.id) {
+            child.position.x = newX;
+            child.position.z = newZ;
+            child.position.y = group.position.y + 1; // Keep slight Y offset
+          }
+        });
+      });
+
+      // Find all boomboxes, vinyl records, and DJ mixers in the scene
+      const boomboxes: THREE.Group[] = [];
+      const vinylRecords: THREE.Group[] = [];
+      const djMixers: THREE.Group[] = [];
+  
+      scene.traverse((object: THREE.Object3D) => {
+        if (object.userData && object.userData.type === 'boombox') {
+          boomboxes.push(object as THREE.Group);
+        }
+        if (object.userData && object.userData.type === 'vinylRecord') {
+          vinylRecords.push(object as THREE.Group);
+        }
+        if (object.userData && object.userData.type === 'djMixer') {
+          djMixers.push(object as THREE.Group);
+        }
+      });
+      
+      // Animate boomboxes (subtle pulsing effect)
+      boomboxes.forEach((boombox: THREE.Group, index: number) => {
+        // Create a unique pulsing frequency for each boombox
+        const pulseSpeed = 0.003 + (index * 0.001);
+        const pulseIntensity = 0.05;
+        
+        // Calculate pulse based on time
+        const pulse = Math.sin(Date.now() * pulseSpeed) * pulseIntensity;
+        
+        // Make the speakers pulse in and out
+        boombox.children.forEach((child: THREE.Object3D) => {
+          if (child instanceof THREE.Mesh && 
+              child.geometry instanceof THREE.CircleGeometry) {
+            // Store original z position if not already stored
+            if (!child.userData.originalZ) {
+              child.userData.originalZ = child.position.z;
+            }
+            
+            // Make speaker pulse outward
+            child.position.z = child.userData.originalZ + pulse;
+            
+            // Make speaker material pulse color intensity
+            if (child.material instanceof THREE.MeshPhongMaterial) {
+              child.material.emissiveIntensity = 0.5 + pulse * 4;
+            }
+          }
+        });
+        
+        // Add a subtle hover motion to the entire boombox
+        const hoverAmount = Math.sin(Date.now() * 0.001 + index) * 0.01;
+        boombox.position.y += hoverAmount;
+      });
+      
+      // Animate vinyl records (rotation)
+      vinylRecords.forEach((vinyl: THREE.Group, index: number) => {
+        // Create a unique rotation speed for each record
+        const rotationSpeed = 0.001 + (index * 0.005);
+        
+        // Rotate the entire vinyl record
+        vinyl.rotation.y += rotationSpeed;
+        
+        // Add a subtle wobble effect
+        const wobbleAmount = 0.0005;
+        vinyl.rotation.x = Math.sin(Date.now() * 0.002) * wobbleAmount;
+        vinyl.rotation.z = Math.cos(Date.now() * 0.002) * wobbleAmount;
+      });
+      
+      // Animate DJ mixer (platter rotation, fader movement, light effects)
+      djMixers.forEach((mixer: THREE.Group) => {
+        // Rotate the platters (turntables)
+        mixer.children.forEach((child: THREE.Object3D) => {
+          if (child instanceof THREE.Mesh && 
+              child.geometry instanceof THREE.CylinderGeometry &&
+              child.position.y > 0.5) {
+            // Left platter rotates at normal speed
+            if (child.position.x < 0) {
+              child.rotation.y += 0.03;
+            } 
+            // Right platter rotates with scratch effect
+            else if (child.position.x > 0) {
+              const scratchEffect = Math.sin(Date.now() * 0.002) > 0.7;
+              child.rotation.y += scratchEffect ? -0.05 : 0.02;
+            }
+          }
+          
+          // Animate control panel lights and faders
+          if (child instanceof THREE.Mesh && 
+              child.geometry instanceof THREE.BoxGeometry &&
+              child.position.y > 0.5) {
+            
+            // Find and animate all the buttons and faders within the control panel
+            child.children.forEach((control: THREE.Object3D) => {
+              // Animate buttons (pulsing lights)
+              if (control instanceof THREE.Mesh && 
+                  control.geometry instanceof THREE.CylinderGeometry) {
                 
-                // Pulse colors
-                if (element.material instanceof THREE.MeshPhongMaterial) {
-                  const hue = (Date.now() * 0.0002 + i * 0.1) % 1;
-                  const color = new THREE.Color().setHSL(hue, 0.8, 0.6);
-                  element.material.emissive.copy(color);
-                  element.material.emissiveIntensity = 0.3 + Math.sin(Date.now() * 0.002 + i) * 0.1;
+                if (control.material instanceof THREE.MeshPhongMaterial) {
+                  // Create rhythmic pulsing for button lights
+                  const buttonPulse = Math.sin(Date.now() * 0.004 + 
+                    control.position.x * 10 + 
+                    control.position.z * 5) > 0;
+                    
+                  control.material.emissiveIntensity = buttonPulse ? 0.8 : 0.3;
                 }
+              }
+              
+              // Animate faders (sliding up and down)
+              if (control instanceof THREE.Mesh && 
+                  control.geometry instanceof THREE.BoxGeometry &&
+                  control.children.length > 0) {
+                
+                control.children.forEach((fader: THREE.Object3D) => {
+                  if (fader instanceof THREE.Mesh) {
+                    // Create a unique motion pattern for each fader
+                    const faderMotion = Math.sin(Date.now() * 0.0015 + control.position.x * 5);
+                    fader.position.z = faderMotion * 0.8; // Move fader up and down
+                  }
+                });
               }
             });
           }
-        }
+        });
         
-        // Rotate and animate central hub
-        if (child.userData && child.userData.type === 'centralHub') {
-          child.rotation.y += 0.005;
-          
-          // If it has children elements, animate them
-          child.children.forEach((element, i) => {
-            if (element instanceof THREE.Mesh) {
-              element.rotation.z += 0.01;
-              element.rotation.x += 0.005;
-              
-              // Scale pulsing
-              const scale = 1 + 0.1 * Math.sin(Date.now() * 0.002 + i);
-              element.scale.set(scale, scale, scale);
-            }
-          });
-        }
+        // Add a subtle hovering motion
+        mixer.position.y += Math.sin(Date.now() * 0.001) * 0.005;
       });
       
       renderer.render(scene, camera);
@@ -379,7 +489,7 @@ export default function DashboardPage() {
     // Handle window resize
     const handleResize = () => {
       if (!mountRef.current) return;
-      
+    
       const width = mountRef.current.clientWidth;
       const height = mountRef.current.clientHeight;
       
@@ -391,7 +501,7 @@ export default function DashboardPage() {
     };
     
     window.addEventListener('resize', handleResize);
-
+    
     // Cleanup function
     return () => {
       if (animationFrameRef.current) {
@@ -410,7 +520,6 @@ export default function DashboardPage() {
       scene.traverse((object: THREE.Object3D) => {
         if (object instanceof THREE.Mesh) {
           object.geometry.dispose();
-          
           if (object.material instanceof THREE.Material) {
             object.material.dispose();
           } else if (Array.isArray(object.material)) {
@@ -519,99 +628,67 @@ export default function DashboardPage() {
       const line = new THREE.Line(lineGeometry, gridMaterial.clone());
       gridGroup3.add(line);
     }
-    
     gridGroup3.userData = { type: 'gridLine' };
     scene.add(gridGroup3);
   };
 
-  // Create abstract shape for central hub
-  const createCentralHub = (scene: THREE.Scene) => {
-    const hubGroup = new THREE.Group();
-    hubGroup.userData = { type: 'centralHub' };
-    
-    // Create a large torus as the centerpiece
-    const torusGeometry = new THREE.TorusGeometry(3, 1, 16, 100);
-    const torusMaterial = new THREE.MeshPhongMaterial({
-      color: 0xFF00FF,
-      emissive: 0xFF00FF,
-      emissiveIntensity: 0.3,
-      shininess: 100
-    });
-    const torus = new THREE.Mesh(torusGeometry, torusMaterial);
-    torus.rotation.x = Math.PI / 2;
-    hubGroup.add(torus);
-    
-    // Add intersecting torus at different angle
-    const torus2 = torus.clone();
-    torus2.rotation.x = 0;
-    torus2.rotation.y = Math.PI / 2;
-    torus2.material = new THREE.MeshPhongMaterial({
-      color: 0x00FFFF,
-      emissive: 0x00FFFF,
-      emissiveIntensity: 0.3,
-      shininess: 100
-    });
-    hubGroup.add(torus2);
-    
-    // Add sphere in the center
-    const sphereGeometry = new THREE.SphereGeometry(2, 32, 32);
-    const sphereMaterial = new THREE.MeshPhongMaterial({
-      color: 0xFFFFFF,
-      emissive: 0xFFFFFF,
-      emissiveIntensity: 0.5,
-      shininess: 100
-    });
-    const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-    hubGroup.add(sphere);
-    
-    // Add the hub to the scene
-    scene.add(hubGroup);
-    
-    // Create pulsing light at the center
-    const pulsingLight = new THREE.PointLight(0xFFFFFF, 1, 20);
-    pulsingLight.position.set(0, 0, 0);
-    pulsingLight.userData = { type: 'hubLight', intensity: 1 };
-    scene.add(pulsingLight);
-  };
-
-  // Create pop art genre cards
+  // Create pop art genre cards with subtler gloss and rotation
   const createPopArtGenreCard = (scene: THREE.Scene, genre: GenreNode) => {
     const [x, y, z] = genre.position;
-    const index = parseInt(genre.id) || 0; // Use id for color selection
-    
+    const index = parseInt(genre.id) || 0;
+      
     // Calculate angle and radius for circular positioning
-    const radius = Math.sqrt(x*x + z*z); // Get distance from center
-    const angle = Math.atan2(z, x); // Get current angle
-    
+    const radius = Math.sqrt(x*x + z*z);
+    const angle = Math.atan2(z, x);
+      
     // Create a group to hold the genre elements
     const genreGroup = new THREE.Group();
     genreGroup.position.set(x, y, z);
-    genreGroup.userData = { 
-      type: 'genre', 
-      id: genre.id, 
-      name: genre.name,
-      angle: angle, // Store angle for animation
-      radius: radius // Store radius for animation
-    };
     
+    // Store animation data on the group
+    genreGroup.userData = {
+      type: 'genreGroup',  // Changed from 'genre' to 'genreGroup'
+      id: genre.id,
+      name: genre.name,
+      angle: angle,
+      radius: radius,
+      rotationSpeed: 0.0015
+    };
+      
     // Create billboard card
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
     canvas.width = 512;
     canvas.height = 384;
-
+    
     if (context) {
-      // Vibrant pop art background
+      // Less vibrant pop art background with reduced brightness
       const colorIndex = index % POP_ART_COLORS.length;
       const mainColor = POP_ART_COLORS[colorIndex];
-      context.fillStyle = mainColor;
+      
+      // Convert hex to RGB for brightness adjustment
+      const r = parseInt(mainColor.slice(1, 3), 16);
+      const g = parseInt(mainColor.slice(3, 5), 16);
+      const b = parseInt(mainColor.slice(5, 7), 16);
+      
+      // Darken the color by 20%
+      const darkerColor = `rgb(${Math.floor(r*0.8)}, ${Math.floor(g*0.8)}, ${Math.floor(b*0.8)})`;
+      context.fillStyle = darkerColor;
       context.fillRect(0, 0, 512, 384);
-      
-      // Add halftone pattern
-      context.fillStyle = 'rgba(255, 255, 255, 0.3)';
-      const dotSize = 12;
-      const dotSpacing = 24;
-      
+          
+      // Add subtler gloss texture
+      const gradient = context.createLinearGradient(0, 0, 512, 384);
+      gradient.addColorStop(0, 'rgba(255, 255, 255, 0.1)');
+      gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.05)');
+      gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      context.fillStyle = gradient;
+      context.fillRect(0, 0, 512, 384);
+          
+      // Add more subtle halftone pattern
+      context.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      const dotSize = 10;
+      const dotSpacing = 30;
+          
       for (let dotX = 0; dotX < 512; dotX += dotSpacing) {
         for (let dotY = 0; dotY < 384; dotY += dotSpacing) {
           if ((dotX + dotY) % 48 < 24) {
@@ -621,68 +698,74 @@ export default function DashboardPage() {
           }
         }
       }
-      
-      // Add bold border
-      context.strokeStyle = '#FFFFFF';
-      context.lineWidth = 10;
-      context.strokeRect(10, 10, 492, 364);
-      
-      // IMPROVED TEXT VISIBILITY
-      // First add black outline for contrast
-      context.strokeStyle = '#000000';
-      context.lineWidth = 15;
-      context.font = 'bold 90px Impact'; // Larger text
+          
+      // Add thinner border
+      context.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+      context.lineWidth = 6;
+      context.strokeRect(12, 12, 488, 360);
+          
+      // Text styling
+      context.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+      context.lineWidth = 12;
+      context.font = 'bold 90px Impact';
       context.textAlign = 'center';
       context.textBaseline = 'middle';
-      
+          
       // Handle long genre names
-      const displayGenre = genre.name.length > 15 ? 
-        genre.name.substring(0, 12) + "..." : 
+      const displayGenre = genre.name.length > 15 ?
+        genre.name.substring(0, 15) + "..." :
         genre.name;
-      
+          
       // Draw text outline first
       context.strokeText(displayGenre.toUpperCase(), 256, 160);
-      
-      // Then fill with bright yellow for much better visibility
-      context.fillStyle = '#FFFFFF'; // Yellow instead of white
+          
+      // Then fill with white with slight transparency for a softer look
+      context.fillStyle = 'rgba(255, 255, 255, 0.9)';
       context.fillText(displayGenre.toUpperCase(), 256, 160);
-      
-      // Add "GENRE" subtitle for extra pop art style
+          
+      // Add "GENRE" subtitle with softer style
       context.font = 'bold 40px Impact';
-      context.strokeStyle = '#000000';
-      context.lineWidth = 8;
-      context.strokeText("GENRE", 256, 240);
-      context.fillStyle = '#FFFFFF';
-      context.fillText("GENRE", 256, 240);
-      
+      context.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+      context.lineWidth = 6;
+      context.strokeText("FAMILY", 256, 240);
+      context.fillStyle = 'rgba(255, 255, 255, 0.85)';
+      context.fillText("FAMILY", 256, 240);
+          
       const texture = new THREE.CanvasTexture(canvas);
-      const cardMaterial = new THREE.SpriteMaterial({ map: texture });
+      
+      // Add slight roughness to the material for less glossy appearance
+      const cardMaterial = new THREE.SpriteMaterial({ 
+        map: texture,
+        transparent: true,
+        opacity: 0.95
+      });
+      
       const card = new THREE.Sprite(cardMaterial);
       card.scale.set(6, 4.5, 1);
-      
-      // Set user data
+          
+      // Set user data for the card
       card.userData = {
-        type: 'genre',
+        type: 'genreCard',  // This is what we'll target in animation
         id: genre.id,
         name: genre.name
       };
-      
+          
       genreGroup.add(card);
     }
-    
-    // Make the card face the center (0,0,0)
+      
+    // Make the group face the center
     genreGroup.lookAt(0, 0, 0);
-    
+      
     // Add the genre group to the scene
     scene.add(genreGroup);
-    
-    // Add a point light with genre color
+      
+    // Add light for this genre
     const color = parseInt(genre.color.replace('#', '0x'));
-    const light = new THREE.PointLight(color, 1, 10);
+    const light = new THREE.PointLight(color, 0.7, 8);
     light.position.set(x, y + 1, z);
-    light.userData = { 
+    light.userData = {
       type: 'genreLight',
-      genreId: genre.id, // Reference to its genre for animation
+      genreId: genre.id,
       angle: angle,
       radius: radius
     };
@@ -690,13 +773,13 @@ export default function DashboardPage() {
   };
 
   // Create floating background shapes for visual interest
-  const createFloatingBackgroundShapes = (scene: THREE.Scene) => {
-    // Create 30+ random floating shapes in the background
+  const createFloatingBackgroundShapes = (scene: THREE.Scene) => {    
+    // Create original abstract shapes (boxes, spheres, cones, etc.)
     for (let i = 0; i < 30; i++) {
       // Random position far from center
-      const distance = 30 + Math.random() * 60;
+      const distance = 30 + Math.random() * 20;
       const angle = Math.random() * Math.PI * 2;
-      const height = Math.random() * 40;
+      const height = 10 + (Math.random() - 0.5) * 30;
       
       const x = Math.cos(angle) * distance;
       const y = height;
@@ -709,39 +792,39 @@ export default function DashboardPage() {
       switch (shapeType) {
         case 0:
             geometry = new THREE.BoxGeometry(
-                1.5 + Math.random() * 3,  // Was 1 + Math.random() * 2
-                1.5 + Math.random() * 3,  // Was 1 + Math.random() * 2
-                1.5 + Math.random() * 3   // Was 1 + Math.random() * 2
+                1.5 + Math.random() * 3,
+                1.5 + Math.random() * 3,
+                1.5 + Math.random() * 3
             );
             break;
         case 1:
             geometry = new THREE.SphereGeometry(
-                1.2 + Math.random() * 2.25,  // Was 0.8 + Math.random() * 1.5
+                1.2 + Math.random() * 2.25,
                 Math.floor(3 + Math.random() * 8),
                 Math.floor(2 + Math.random() * 8)
             );
             break;
         case 2:
             geometry = new THREE.ConeGeometry(
-                1.2 + Math.random() * 1.8,  // Was 0.8 + Math.random() * 1.2
-                3 + Math.random() * 4.5,    // Was 2 + Math.random() * 3
+                1.2 + Math.random() * 1.8,
+                3 + Math.random() * 4.5,
                 Math.floor(3 + Math.random() * 5)
             );
             break;
         case 3:
             geometry = new THREE.TetrahedronGeometry(
-                1.5 + Math.random() * 2.25  // Was 1 + Math.random() * 1.5
+                1.5 + Math.random() * 2.25
             );
             break;
         case 4:
             geometry = new THREE.TorusGeometry(
-                1.5 + Math.random() * 2.25,  // Was 1 + Math.random() * 1.5
-                0.45 + Math.random() * 0.75, // Was 0.3 + Math.random() * 0.5
+                1.5 + Math.random() * 2.25,
+                0.45 + Math.random() * 0.75,
                 Math.floor(4 + Math.random() * 12),
                 Math.floor(4 + Math.random() * 8)
             );
             break;
-    }
+      }
       
       // Random pop art color
       const color = parseInt(POP_ART_COLORS[Math.floor(Math.random() * POP_ART_COLORS.length)].replace('#', '0x'));
@@ -790,7 +873,7 @@ export default function DashboardPage() {
     
     // Add some linear elements (rods)
     for (let i = 0; i < 10; i++) {
-      const distance = 50 + Math.random() * 50;
+      const distance = 30 + Math.random() * 40;
       const angle = Math.random() * Math.PI * 2;
       const height = (Math.random() - 0.5) * 40;
       
@@ -822,37 +905,349 @@ export default function DashboardPage() {
       scene.add(rod);
     }
     
-    // Add some flat planes
-    for (let i = 0; i < 10; i++) {
-      const distance = 50 + Math.random() * 50;
+    // Add vinyl records
+    createVinylRecords(scene, POP_ART_COLORS, 5);
+        
+    // Add boomboxes
+    createBoomboxes(scene, POP_ART_COLORS, 5);
+
+    // Add a DJ mixer
+    createDjMixers(scene);
+  };
+
+  // Create vinyl records
+  const createVinylRecords = (scene: THREE.Scene, colors: string[], count: number) => {
+    for (let i = 0; i < count; i++) {
+      const recordGroup = new THREE.Group();
+      recordGroup.userData = { type: 'vinylRecord' };
+      
+      // Pick a random color for the label
+      const labelColor = colors[Math.floor(Math.random() * colors.length)];
+      
+      // Vinyl disc
+      const discGeometry = new THREE.CylinderGeometry(3, 3, 0.1, 32);
+      const discMaterial = new THREE.MeshPhongMaterial({
+        color: 0x111111,
+        shininess: 90,
+        specular: 0x333333
+      });
+      const disc = new THREE.Mesh(discGeometry, discMaterial);
+      disc.rotation.x = Math.PI / 2;
+      
+      // Add grooves (rings) to the vinyl
+      for (let r = 0.5; r < 2.8; r += 0.2) {
+        const ringGeometry = new THREE.RingGeometry(r, r + 0.03, 64);
+        const ringMaterial = new THREE.MeshBasicMaterial({
+          color: 0x222222,
+          side: THREE.DoubleSide
+        });
+        const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 0.051;
+        disc.add(ring);
+      }
+      
+      // Center label
+      const labelGeometry = new THREE.CylinderGeometry(1, 1, 0.12, 32);
+      const labelMaterial = new THREE.MeshPhongMaterial({
+        color: parseInt(labelColor.replace('#', '0x')),
+        emissive: parseInt(labelColor.replace('#', '0x')),
+        emissiveIntensity: 0.3,
+        shininess: 60
+      });
+      const label = new THREE.Mesh(labelGeometry, labelMaterial);
+      label.position.y = 0.01;
+      label.rotation.x = Math.PI / 2;
+      
+      // Center hole
+      const holeGeometry = new THREE.CylinderGeometry(0.1, 0.1, 0.2, 16);
+      const holeMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+      const hole = new THREE.Mesh(holeGeometry, holeMaterial);
+      hole.rotation.x = Math.PI / 2;
+      
+      recordGroup.add(disc);
+      recordGroup.add(label);
+      recordGroup.add(hole);
+      
+      // Position randomly
+      const distance = 30 + Math.random() * 40;
       const angle = Math.random() * Math.PI * 2;
-      const height = (Math.random() - 0.5) * 30;
+      const height = (Math.random() - 0.5) * 40;
       
-      const x = Math.cos(angle) * distance;
-      const y = height;
-      const z = Math.sin(angle) * distance;
+      recordGroup.position.set(
+        Math.cos(angle) * distance,
+        height,
+        Math.sin(angle) * distance
+      );
       
-      const size = 2 + Math.random() * 4;
+      // Tilt slightly for visual interest
+      recordGroup.rotation.set(
+        Math.random() * 0.5,
+        Math.random() * Math.PI * 2,
+        Math.random() * 0.5
+      );
       
-      const planeGeometry = new THREE.PlaneGeometry(size, size);
-      const color = parseInt(POP_ART_COLORS[Math.floor(Math.random() * POP_ART_COLORS.length)].replace('#', '0x'));
+      // Add to scene
+      scene.add(recordGroup);
+    }
+  };
+  
+  // Create boomboxes
+  const createBoomboxes = (scene: THREE.Scene, colors: string[], count: number) => {
+    for (let i = 0; i < count; i++) {
+      const boomboxGroup = new THREE.Group();
+      boomboxGroup.userData = { type: 'boombox' };
       
-      const planeMaterial = new THREE.MeshBasicMaterial({
-        color: color,
-        side: THREE.DoubleSide,
-        transparent: true,
-        opacity: 0.7
+      // Random color
+      const mainColor = colors[Math.floor(Math.random() * colors.length)];
+      const accentColor = colors[(colors.indexOf(mainColor) + 5) % colors.length];
+      
+      const mainMaterial = new THREE.MeshPhongMaterial({
+        color: parseInt(mainColor.replace('#', '0x')),
+        emissive: parseInt(mainColor.replace('#', '0x')),
+        emissiveIntensity: 0.3,
+        shininess: 80
       });
       
-      const plane = new THREE.Mesh(planeGeometry, planeMaterial);
-      plane.position.set(x, y, z);
-      plane.rotation.set(
-        Math.random() * Math.PI,
-        Math.random() * Math.PI,
-        Math.random() * Math.PI
+      const accentMaterial = new THREE.MeshPhongMaterial({
+        color: parseInt(accentColor.replace('#', '0x')),
+        emissive: parseInt(accentColor.replace('#', '0x')),
+        emissiveIntensity: 0.5,
+        shininess: 90
+      });
+      
+      // Main body
+      const body = new THREE.Mesh(
+        new THREE.BoxGeometry(5, 3, 2),
+        mainMaterial
       );
-      plane.userData = { type: 'abstractShape' };
-      scene.add(plane);
+      
+      // Speakers
+      const leftSpeaker = new THREE.Mesh(
+        new THREE.CircleGeometry(1, 32),
+        accentMaterial
+      );
+      leftSpeaker.position.set(-1.5, 0, 1.01);
+      
+      const rightSpeaker = new THREE.Mesh(
+        new THREE.CircleGeometry(1, 32),
+        accentMaterial
+      );
+      rightSpeaker.position.set(1.5, 0, 1.01);
+      
+      // Controls
+      const controlsPanel = new THREE.Mesh(
+        new THREE.BoxGeometry(1.8, 1, 0.2),
+        accentMaterial
+      );
+      controlsPanel.position.set(0, 0.8, 1.1);
+      
+      // Handle
+      const handle = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.2, 0.2, 6, 8),
+        mainMaterial
+      );
+      handle.rotation.z = Math.PI / 2;
+      handle.position.set(0, 2, 0);
+      
+      // Buttons and knobs
+      for (let i = 0; i < 3; i++) {
+        const knob = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.2, 0.2, 0.1, 16),
+          new THREE.MeshPhongMaterial({ color: 0xFFFFFF })
+        );
+        knob.rotation.x = Math.PI / 2;
+        knob.position.set(-0.6 + i * 0.6, 0.8, 1.21);
+        boomboxGroup.add(knob);
+      }
+      
+      boomboxGroup.add(body);
+      boomboxGroup.add(leftSpeaker);
+      boomboxGroup.add(rightSpeaker);
+      boomboxGroup.add(controlsPanel);
+      boomboxGroup.add(handle);
+      
+      // Position 
+      const distance = 30 + Math.random() * 40;
+      const angle = Math.random() * Math.PI * 2;
+      const height = (Math.random() - 0.5) * 40;
+      
+      boomboxGroup.position.set(
+        Math.cos(angle) * distance,
+        height,
+        Math.sin(angle) * distance
+      );
+      
+      // Random rotation
+      boomboxGroup.rotation.set(
+        Math.random() * 0.5,
+        Math.random() * Math.PI * 2,
+        Math.random() * 0.5
+      );
+      
+      // Add to scene
+      scene.add(boomboxGroup);
+    }
+  };
+
+  // Create DJ mixers
+  const createDjMixers = (scene: THREE.Scene) => {
+    const mixerGroup = new THREE.Group();
+    mixerGroup.userData = { type: 'djMixer' };
+    
+    // Pick colors
+    const baseColor = POP_ART_COLORS[7];
+    const accentColor = POP_ART_COLORS[3];
+    
+    const baseMaterial = new THREE.MeshPhongMaterial({
+      color: parseInt(baseColor.replace('#', '0x')),
+      emissive: parseInt(baseColor.replace('#', '0x')),
+      emissiveIntensity: 0.3,
+      shininess: 80
+    });
+    
+    const accentMaterial = new THREE.MeshPhongMaterial({
+      color: parseInt(accentColor.replace('#', '0x')),
+      emissive: parseInt(accentColor.replace('#', '0x')),
+      emissiveIntensity: 0.4,
+      shininess: 90
+    });
+    
+    // Mixer base
+    const base = new THREE.Mesh(
+      new THREE.BoxGeometry(8, 1, 4),
+      baseMaterial
+    );
+    
+    // Create turntables
+    const leftPlatter = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.2, 1.2, 0.2, 32),
+      accentMaterial
+    );
+    leftPlatter.position.set(-2.5, 0.6, 0);
+    // Remove rotation to make turntable lie flat
+    // leftPlatter.rotation.x = Math.PI / 2;
+    
+    const rightPlatter = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.2, 1.2, 0.2, 32),
+      accentMaterial
+    );
+    rightPlatter.position.set(2.5, 0.6, 0);
+    // Remove rotation to make turntable lie flat
+    // rightPlatter.rotation.x = Math.PI / 2;
+    
+    // Mixer controls (buttons and faders)
+    const controlsPanel = new THREE.Mesh(
+      new THREE.BoxGeometry(3, 0.2, 3),
+      new THREE.MeshPhongMaterial({ color: 0x222222 })
+    );
+    controlsPanel.position.set(0, 0.6, 0);
+    
+    // Add fader tracks
+    for (let i = 0; i < 3; i++) {
+      const faderTrack = new THREE.Mesh(
+        new THREE.BoxGeometry(0.2, 0.05, 2),
+        new THREE.MeshBasicMaterial({ color: 0x444444 })
+      );
+      faderTrack.position.set(-0.8 + i * 0.8, 0.7, 0);
+      
+      const fader = new THREE.Mesh(
+        new THREE.BoxGeometry(0.3, 0.1, 0.3),
+        new THREE.MeshPhongMaterial({ color: 0xFFFFFF })
+      );
+      fader.position.y = 0.03;
+      fader.position.z = Math.random() * 1.6 - 0.8; // Random fader position
+      
+      faderTrack.add(fader);
+      controlsPanel.add(faderTrack);
+    }
+    
+    // Add buttons and knobs with glowing effect
+    for (let i = 0; i < 6; i++) {
+      const row = Math.floor(i / 3);
+      const col = i % 3;
+      
+      const buttonColor = POP_ART_COLORS[Math.floor(Math.random() * POP_ART_COLORS.length)];
+      const buttonMaterial = new THREE.MeshPhongMaterial({
+        color: parseInt(buttonColor.replace('#', '0x')),
+        emissive: parseInt(buttonColor.replace('#', '0x')),
+        emissiveIntensity: 0.6,
+        shininess: 100
+      });
+      
+      const button = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.15, 0.15, 0.1, 16),
+        buttonMaterial
+      );
+      button.position.set(-0.8 + col * 0.8, 0.7, -1 + row * 0.6);
+      button.rotation.x = Math.PI / 2;
+      
+      controlsPanel.add(button);
+    }
+    
+    mixerGroup.add(base);
+    mixerGroup.add(leftPlatter);
+    mixerGroup.add(rightPlatter);
+    mixerGroup.add(controlsPanel);
+    
+    // Position the mixer
+    const distance = 0;
+    const angle = 0.25 * Math.PI * 2;
+    const height = 10;
+    
+    mixerGroup.position.set(
+      Math.cos(angle) * distance,
+      height,
+      Math.sin(angle) * distance
+    );
+        
+    // Add to scene
+    scene.add(mixerGroup);
+  };
+
+  const fetchAndCreateGenreCards = async (shouldUpdateState = true) => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+      
+      const response = await fetch("/api/journey?mode=main", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.results && Array.isArray(data.results)) {
+          // Map the results to include pop art colors and IDs
+          const genresWithColors = data.results.map((apiGenre: GenreNode, index: number) => {
+            // Create a proper GenreNode object with all required properties
+            const radius = 12; // Radius for circular arrangement
+            const angle = (index / data.results.length) * Math.PI * 2;
+            const x = Math.cos(angle) * radius;
+            const z = Math.sin(angle) * radius;
+            
+            return {
+              id: index.toString(),
+              name: apiGenre.name,
+              color: POP_ART_COLORS[index % POP_ART_COLORS.length],
+              position: [x, 10, z] as [number, number, number] // Explicitly add position
+            };
+          });
+          
+          // Create only the genre cards
+          genresWithColors.forEach((genre: GenreNode) => {
+            if (sceneRef.current) {
+              createPopArtGenreCard(sceneRef.current, genre);
+            }
+          });
+          
+          // Only update state if requested
+          if (shouldUpdateState) {
+            setMainGenres(genresWithColors);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching genres:", error);
     }
   };
 
@@ -860,7 +1255,7 @@ export default function DashboardPage() {
     // Close any open song details
     setSongDetails(null);
     
-    // Clean up the scene thoroughly
+    // Clean up the scene but preserve background elements
     clearSceneForViewTransition("genres");
     
     // Set current view back to genres
@@ -872,11 +1267,11 @@ export default function DashboardPage() {
       controlsRef.current.enabled = false;
     }
     
-    // Start camera animation BEFORE fetching data
+    // Start camera animation
     const animateCamera = () => {
       if (!cameraRef.current) {
         // If no camera, just fetch and return
-        fetchGenresAndCreateScene();
+        fetchAndCreateGenreCards(false); // Don't update state to avoid recreating background
         return;
       }
       
@@ -903,47 +1298,17 @@ export default function DashboardPage() {
             // Continue animation
             animationFrameRef.current = requestAnimationFrame(updateCamera);
           } else {
-            // Animation complete - NOW fetch genres and rebuild scene
+            // Animation complete - fetch genres and rebuild scene, but WITHOUT updating state
             if (controlsRef.current) {
               controlsRef.current.enabled = true;
               controlsRef.current.update();
             }
-            fetchGenresAndCreateScene();
+            fetchAndCreateGenreCards(false); // Pass false to not update state
           }
         }
       };
       // Start animation
       updateCamera();
-    };
-    
-
-
-    const fetchGenresAndCreateScene = async () => {
-      try {
-        const token = localStorage.getItem("token");
-        if (!token) return;
-        
-        const response = await fetch("/api/journey?mode=main", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          if (data.results && Array.isArray(data.results)) {
-            // Map the results to include pop art colors and IDs
-            const genresWithColors = data.results.map((genre:GenreNode, index:number) => ({
-              id: index.toString(),
-              name: genre.name,
-              color: POP_ART_COLORS[index % POP_ART_COLORS.length]
-            }));
-            
-            // Update state which will trigger scene rebuild
-            setMainGenres(genresWithColors);
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching genres:", error);
-      }
     };
     
     // Start the process with camera animation
@@ -1049,10 +1414,8 @@ export default function DashboardPage() {
       }
     );
   };
+  
   // Animate camera to pop art songs view
-  // Update the animateCameraToSongsView function to accept custom Z position
-
-  const ALBUM_VIEW_TARGET_POSITION = new THREE.Vector3(0, 0, 40);
   const animateCameraToSongsView = () => {
     if (!cameraRef.current) return;
     
@@ -1103,12 +1466,14 @@ export default function DashboardPage() {
     const objectsToRemove: THREE.Object3D[] = [];
     sceneRef.current.traverse((object) => {
       if (object.userData && 
-          (object.userData.type === 'genre' || 
+          (object.userData.type === 'genreCard' || 
+           object.userData.type === 'djMixer' || 
+           object.userData.type === 'genreGroup' || 
+           object.userData.type === 'genreLight' || 
            object.userData.type === 'song' || 
            object.userData.type === 'songStage' || 
            object.userData.type === 'relatedGenre' ||
-           object.userData.type === 'backButton' ||
-           object.userData.type === 'centralHub')) { 
+           object.userData.type === 'backButton')) { 
         objectsToRemove.push(object);
       }
     });
@@ -1116,7 +1481,7 @@ export default function DashboardPage() {
     // Remove objects
     objectsToRemove.forEach(obj => {
       sceneRef.current?.remove(obj);
-      if (obj instanceof THREE.Mesh) {
+      if (obj instanceof THREE.Mesh || obj instanceof THREE.Sprite) {
         if (obj.geometry) obj.geometry.dispose();
         if (obj.material) {
           if (Array.isArray(obj.material)) {
@@ -1250,7 +1615,7 @@ export default function DashboardPage() {
       backContext.font = 'bold 64px Impact, Charcoal, sans-serif';
       backContext.textAlign = 'center';
       backContext.textBaseline = 'middle';
-      backContext.fillText('← BACK TO MAIN GENRES', 512, 128);
+      backContext.fillText('← BACK TO MAIN GENRE FAMILIES', 512, 128);
 
       // Remove shadow
       backContext.shadowColor = 'transparent';
@@ -1271,7 +1636,7 @@ export default function DashboardPage() {
       const backMaterial = new THREE.SpriteMaterial({ map: backTexture });
       const backButton = new THREE.Sprite(backMaterial);
       backButton.scale.set(18, 5, 2);
-      backButton.position.set(0, -10, 20);
+      backButton.position.set(0, 0, 15);
       // Apply the right userData for click handling
       backButton.userData = { type: 'backButton', action: 'returnToGenres' };
       sceneRef.current.add(backButton);
@@ -1338,8 +1703,7 @@ export default function DashboardPage() {
       animateCameraToSongsView();
   };
 
-  // Add this comprehensive cleanup function
-  const clearSceneForViewTransition = (targetView:string) => {
+  const clearSceneForViewTransition = (targetView: string) => {
     if (!sceneRef.current) return;
     
     console.log(`Clearing scene for transition to: ${targetView}`);
@@ -1348,7 +1712,8 @@ export default function DashboardPage() {
     let typesToRemove: string[] = [];
     
     if (targetView === "genres") {
-      // When going to genres view, remove everything except background elements
+      // When going to genres view, preserve both background and genres
+      // Only remove content-specific elements
       typesToRemove = ['song', 'songStage', 'youtubeDecoration', 'youtubePreview', 'relatedGenre', 'backButton'];
     } else if (targetView === "songs") {
       // When going to songs view, remove related view and make sure no genre objects remain
@@ -1381,12 +1746,6 @@ export default function DashboardPage() {
       }
     });
     
-    // Also clean up any ongoing animations
-    if (typeof window !== 'undefined' && window.floatingAnimations) {
-      window.floatingAnimations.forEach(id => clearTimeout(id));
-      window.floatingAnimations = [];
-    }
-
     console.log(`Removed ${objectsToRemove.length} objects from scene`);
   };
 
@@ -1489,10 +1848,7 @@ export default function DashboardPage() {
         ...prev,
         youtube: youtubeUrl,
       }));
-  
-      // // Create YouTube preview immediately
-      // createYoutubePreview(youtubeUrl, null, true);
-  
+    
       // Then fetch the actual data
       const response = await fetch(`/api/journey?mode=song&arg=${encodeURIComponent(youtubeUrl)}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -1531,8 +1887,6 @@ export default function DashboardPage() {
       console.error("Error fetching song details:", error);
     }
   };
-
-  const YOUTUBE_CAMERA_POSITION = new THREE.Vector3(0, 10, 30);
 
   const createYoutubePreview = (youtubeId: string, songDetails: SongDetails, isInitialRender: boolean = false) => {
     if (!sceneRef.current || !cameraRef.current) return;
@@ -1918,40 +2272,30 @@ export default function DashboardPage() {
   // Animation function for orbiting genre cards
   const startOrbitAnimation = () => {
     if (!window.genreCards || window.genreCards.length === 0) return;
-    
     window.isOrbiting = true;
-    
     // Animation settings
     const rotationSpeed = 0.001; // Adjust for faster/slower rotation
-    
     // Animation loop using requestAnimationFrame
     const animate = () => {
       if (!window.genreCards || window.genreCards.length === 0) {
         window.isOrbiting = false;
         return;
       }
-      
       window.genreCards.forEach(genreGroup => {
         // Update angle (subtract for clockwise rotation)
         genreGroup.userData.angle -= rotationSpeed;
-        
         // Update position based on angle
         const x = Math.cos(genreGroup.userData.angle) * genreGroup.userData.radius;
         const z = Math.sin(genreGroup.userData.angle) * genreGroup.userData.radius;
-        
         genreGroup.position.set(x, 6, z);
-        
         // Keep card facing center
         genreGroup.lookAt(0, 6, 0);
       });
-      
       // Continue animation loop
       window.orbitAnimationId = requestAnimationFrame(animate);
     };
-    
     // Start animation
     window.orbitAnimationId = requestAnimationFrame(animate);
-    
     // Store animation ID for cleanup
     if (!window.floatingAnimations) {
       window.floatingAnimations = [];
@@ -2005,7 +2349,7 @@ export default function DashboardPage() {
           console.log("Clicked object:", userData);
           
           // Handle different object types
-          if (userData.type === 'genre') {
+          if (userData.type === 'genreCard') {
             console.log(`Clicked on genre: ${userData.name}`);
             fetchSongsForGenre(userData.name);
           } 
@@ -2165,7 +2509,7 @@ export default function DashboardPage() {
             <CardHeader className="p-2 flex flex-row items-center justify-between">
               <CardTitle className="flex items-center">
                 <Music className="h-5 w-5 text-cyan-400 mr-2" />
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 to-yellow-400">Practice</span>
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 to-yellow-400">Game</span>
               </CardTitle>
             </CardHeader>
             <CardContent className="p-2">
@@ -2213,7 +2557,7 @@ export default function DashboardPage() {
                     router.push(`/practice?mode=${practiceMode}`);
                   }}
                 >
-                  Start Practice Session
+                  Start Game
                 </Button>
               </div>
             </CardContent>
