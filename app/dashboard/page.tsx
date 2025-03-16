@@ -14,6 +14,7 @@ interface UserData {
   email: string;
   exercises_count: number;
   correct_count: number;
+  accuracy?: number;
   rank?: number;
 }
 
@@ -49,17 +50,6 @@ interface SongNode {
   position: [number, number, number];
 }
 
-interface SongDetails {
-  name?: string;
-  title?: string;
-  artist?: string;
-  album?: string;
-  pic?: string;
-  youtube?: string;
-  youtubeId?: string;
-  genres?: string[];
-}
-
 // Color palette for pop art aesthetic
 const POP_ART_COLORS = [
   '#FF2B5B', // Hot pink
@@ -82,6 +72,27 @@ declare global {
   }
 }
 
+interface CommentData {
+  id: string;
+  text: string;
+  timestamp: string;
+  userId?: string;
+}
+
+// Update the SongDetails interface to include like and comment data
+interface SongDetails {
+  name?: string;
+  title?: string;
+  artist?: string;
+  album?: string;
+  pic?: string;
+  youtube?: string;
+  youtubeId?: string;
+  genres?: string[];
+  comments?: CommentData[];
+  likes?: number;
+}
+
 // Main component
 export default function DashboardPage() {
   const router = useRouter();
@@ -93,7 +104,6 @@ export default function DashboardPage() {
     correct_count: 0,
   });
 
-  const [practiceMode, setPracticeMode] = useState('hard');
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -104,6 +114,12 @@ export default function DashboardPage() {
   const [songDetails, setSongDetails] = useState<SongDetails | null>(null);
   const [showLeaderboard, setShowLeaderboard] = useState(true);
   const [showExplore, setShowExplore] = useState(false);
+
+  const [comments, setComments] = useState<CommentData[]>([]);
+  const [newComment, setNewComment] = useState("");
+  const [likeCount, setLikeCount] = useState(0);
+  const [userLiked, setUserLiked] = useState(false);
+  const [showCommentsModal, setShowCommentsModal] = useState(false);
 
   // Canvas refs
   const mountRef = useRef<HTMLDivElement>(null);
@@ -1620,18 +1636,6 @@ export default function DashboardPage() {
       // Remove shadow
       backContext.shadowColor = 'transparent';
 
-      // Add comic-style action marks
-      backContext.strokeStyle = '#000000';
-      backContext.lineWidth = 4;
-
-      // Action lines on the left side by the arrow
-      for (let i = 0; i < 5; i++) {
-        backContext.beginPath();
-        backContext.moveTo(200 - (i * 15), 50 + (i * 20));
-        backContext.lineTo(250 - (i * 10), 80 + (i * 15));
-        backContext.stroke();
-      }
-
       const backTexture = new THREE.CanvasTexture(backButtonCanvas);
       const backMaterial = new THREE.SpriteMaterial({ map: backTexture });
       const backButton = new THREE.Sprite(backMaterial);
@@ -1819,14 +1823,15 @@ export default function DashboardPage() {
       console.error("Error fetching songs:", error);
     }
   };
-
-  const fetchSongDetails = async (youtubeUrl:string) => {
+  
+  // fetchSongDetail
+  const fetchSongDetails = async (youtubeUrl: string) => {
     try {
       console.log(`Fetching song details for YouTube: ${youtubeUrl}`);
   
       // Extract YouTube ID from URL
       const youtubeId = extractYoutubeId(youtubeUrl);
-      console.log("Extracted YouTube ID:", youtubeId); // Debug log
+      console.log("Extracted YouTube ID:", youtubeId);
       
       if (!youtubeId) {
         console.error("Invalid YouTube URL");
@@ -1871,6 +1876,9 @@ export default function DashboardPage() {
           
           // Update YouTube preview with real data
           createYoutubePreview(youtubeUrl, songDetails as SongDetails, false);
+          
+          // Fetch likes and comments for the song
+          fetchSongData(youtubeId);
         }
       } else {
         console.error("Error fetching song details");
@@ -1882,9 +1890,234 @@ export default function DashboardPage() {
           youtube: youtubeUrl,
           youtubeId: youtubeId
         }));
+        
+        // Fetch likes and comments even with fallback data
+        fetchSongData(youtubeId);
       }
     } catch (error) {
       console.error("Error fetching song details:", error);
+    }
+  };
+
+  // Define Neo4j integer interface
+  interface Neo4jInteger {
+    low: number;
+    high: number;
+    toString: () => string;
+  }
+
+  // Main conversion function with proper typing
+  const ensureJSValue = (value: unknown): unknown => {
+    if (value === null || value === undefined) return value;
+    
+    // Handle Neo4j integers (objects with low and high properties)
+    if (typeof value === 'object' && value !== null && 'low' in value && 'high' in value) {
+      return Number((value as Neo4jInteger).toString());
+    }
+    
+    // Handle arrays
+    if (Array.isArray(value)) {
+      return value.map(item => ensureJSValue(item));
+    }
+    
+    // Handle objects
+    if (typeof value === 'object' && value !== null) {
+      const result: Record<string, unknown> = {};
+      for (const key in value as Record<string, unknown>) {
+        result[key] = ensureJSValue((value as Record<string, unknown>)[key]);
+      }
+      return result;
+    }
+    
+    return value;
+  };
+
+  const fetchUserData = async (): Promise<UserData | null> => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        console.error("No auth token found");
+        return null;
+      }
+      
+      const response = await fetch("/api/user", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch user info');
+      }
+      
+      const data = await response.json();
+      setUserData(data);
+      return data;
+    } catch (error) {
+      console.error("Error fetching user data:", error);
+      return null;
+    }
+  };
+
+  //fetchSongData for likes, comments, and other stats
+  const fetchSongData = async (youtubeId: string) => {
+    if (!youtubeId) return;
+    
+    const fullYoutubeLink = getFullYouTubeLink(youtubeId);
+    
+    try {
+      const response = await fetch(`/api/song?youtube_link=${encodeURIComponent(fullYoutubeLink)}`);
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          // Song not found in database, that's okay for new songs
+          console.log("Song not yet in database:", fullYoutubeLink);
+          return;
+        }
+        throw new Error('Failed to fetch song data');
+      }
+      
+      const data = await response.json();
+      
+      interface ProcessedSongData {
+        comments?: CommentData[];
+        likes?: number | string;
+        moods?: unknown[];
+        genres?: unknown[];
+        song?: Record<string, unknown>;
+      }
+
+      // Then in your code:
+      const processedData = ensureJSValue(data) as ProcessedSongData;
+        
+      // Now you can safely access properties
+      if (processedData.comments && Array.isArray(processedData.comments)) {
+        setComments(processedData.comments);
+      } else {
+        setComments([]);
+      }
+
+      if (processedData.likes !== undefined) {
+        setLikeCount(Number(processedData.likes));
+      } else {
+        setLikeCount(0);
+      }
+      setUserLiked(false); 
+      
+      console.log("Fetched song data from Neo4j:", processedData);
+
+    } catch (error) {
+      console.error("Error fetching song data:", error);
+    }
+  };
+  
+  // Helper function to get full YouTube link from video ID
+  const getFullYouTubeLink = (videoId: string): string => {
+    if (!videoId) return "";
+    return `https://www.youtube.com/watch?v=${videoId}`;
+  };
+  
+  // Add this function to handle adding a comment
+  const handleAddComment = async () => {
+    if (newComment.trim() === "" || !songDetails?.name || !songDetails?.youtube) return;
+    
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        console.error("No auth token found");
+        return;
+      }
+      
+      // Get userId from userData
+      if (!userData) {
+        await fetchUserData();
+      }
+      
+      const userId = userData?.email || "anonymous_user";
+      const youtubeId = extractYoutubeId(songDetails.youtube);
+      const fullYoutubeLink = getFullYouTubeLink(youtubeId || "");
+      
+      const songRequest = {
+        youtube_link: fullYoutubeLink,
+        songTitle: songDetails.name,
+        comment: newComment,
+        userId
+      };
+      
+      const response = await fetch("/api/song", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(songRequest),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to add comment');
+      }
+      
+      const data = await response.json();
+      console.log("Comment added successfully:", data);
+      
+      // Add the new comment to the local state - ensure it's safe for rendering
+      if (data.comment) {
+        const newCommentData = ensureJSValue(data.comment) as CommentData;
+        setComments(prev => [...prev, newCommentData]);
+      }
+      
+      setNewComment("");
+    } catch (error) {
+      console.error("Error adding comment:", error);
+    }
+  };
+  
+  // Add this function to handle liking a song
+  const handleLike = async () => {
+    if (userLiked || !songDetails?.name || !songDetails?.youtube) return;
+    
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        console.error("No auth token found");
+        return;
+      }
+      
+      // Get userId from userData
+      if (!userData) {
+        await fetchUserData();
+      }
+      
+      const userId = userData?.email || "anonymous_user";
+      const youtubeId = extractYoutubeId(songDetails.youtube);
+      const fullYoutubeLink = getFullYouTubeLink(youtubeId || "");
+      
+      const songRequest = {
+        youtube_link: fullYoutubeLink,
+        songTitle: songDetails.name,
+        like: true,
+        userId
+      };
+      
+      const response = await fetch("/api/song", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(songRequest),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to like song');
+      }
+      
+      const data = await response.json();
+      console.log("Song liked successfully:", data);
+      
+      // Update local state
+      setLikeCount(data.likes ? Number(data.likes) : likeCount + 1);
+      setUserLiked(true);
+    } catch (error) {
+      console.error("Error liking song:", error);
     }
   };
 
@@ -2475,14 +2708,14 @@ export default function DashboardPage() {
     <div className="flex flex-col min-h-screen bg-black text-white">
       {/* Header with pop art styling */}
       <header className="px-4 lg:px-6 h-14 flex items-center bg-gradient-to-r from-indigo-900 via-black to-indigo-900 border-b-4 border-pink-500 z-10">
-        <Button
+        {currentView !== "genres" && <Button
           className="bg-cyan-500 hover:bg-cyan-600 text-black font-bold"
           size="sm"
           onClick={returnToMainView}
         >
           <Home className="h-4 w-4 mr-1" />
           Reset
-        </Button>
+        </Button>}
         <nav className="ml-auto flex items-center space-x-4">
           <span className="text-sm font-medium text-cyan-400 hover:text-pink-400 transition-colors">{userData.email}</span>
           <Button
@@ -2523,38 +2756,12 @@ export default function DashboardPage() {
                     '--tw-progress-fill': 'linear-gradient(to right, #36DBFF, #FF3864)',
                   } as React.CSSProperties}
                 />
-                <div className="flex justify-between mt-2 bg-indigo-900/50 rounded-lg p-1 border border-cyan-400">
-                  <Button
-                    size="sm"
-                    className={`flex-1 text-xs font-bold ${practiceMode === 'easy'
-                      ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white'
-                      : 'bg-transparent text-cyan-400 hover:text-white hover:bg-indigo-800'}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setPracticeMode('easy');
-                    }}
-                  >
-                    Easy Mode
-                  </Button>
-                  <Button
-                    size="sm"
-                    className={`flex-1 text-xs font-bold ${practiceMode === 'hard'
-                      ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white'
-                      : 'bg-transparent text-pink-400 hover:text-white hover:bg-indigo-800'}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setPracticeMode('hard');
-                    }}
-                  >
-                    Hard Mode
-                  </Button>
-                </div>
                 <Button
                   size="sm"
                   className="mt-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-bold border-2 border-white pulsate-button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    router.push(`/practice?mode=${practiceMode}`);
+                    router.push(`/practice`);
                   }}
                 >
                   Start Game
@@ -2595,7 +2802,7 @@ export default function DashboardPage() {
             </CardHeader>
             {showExplore && (
               <CardContent className="p-2">
-                <p className="text-sm mb-2 text-cyan-400 font-bold">Discover songs, albums, artists, and music tags</p>
+                <p className="text-sm mb-2 font-bold">Discover songs, albums, artists, and music tags</p>
                 <Button size="sm" className="bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-500 hover:to-amber-600 text-black font-bold">
                   Open Explorer
                 </Button>
@@ -2631,6 +2838,15 @@ export default function DashboardPage() {
             </CardHeader>
             {showLeaderboard && (
               <CardContent className="p-2">
+                <div className="mb-2">
+                  <div className="flex justify-between items-center px-2 text-xs text-gray-400 font-medium">
+                    <span>User</span>
+                    <div className="flex space-x-4">
+                      <span className="w-16 text-center">Accuracy</span>
+                      <span className="w-16 text-center">Songs</span>
+                    </div>
+                  </div>
+                </div>
                 <ul className="space-y-2 text-sm">
                   {leaderboard.slice(0, 5).map((entry, index) => (
                     <li
@@ -2640,14 +2856,27 @@ export default function DashboardPage() {
                       }`}
                     >
                       <span className={`${entry.email === userData.email ? 'text-cyan-400 font-bold' : 'text-white'}`}>
-                        {index + 1}. {entry.email.split('@')[0]}
+                        {entry.email.split('@')[0].slice(0, 9)}
                       </span>
-                      <span className="text-yellow-400 font-bold">{entry.accuracy.toFixed(1)}%</span>
+                      <div className="flex space-x-4">
+                        <span className="w-16 text-center text-yellow-400 font-bold">{entry.accuracy.toFixed(1)}%</span>
+                        <span className="w-16 text-center text-green-400 font-bold">{entry.exercises_count}</span>
+                      </div>
                     </li>
                   ))}
                 </ul>
-                {userData.rank && userData.rank > 5 && (
-                  <p className="mt-2 text-xs text-cyan-400">Your rank: #{userData.rank}</p>
+                {userData && userData.email && (
+                  leaderboard.findIndex(entry => entry.email === userData.email) >= 5 ? (
+                    <div className="mt-3 p-2 bg-indigo-900/30 rounded flex justify-between items-center">
+                      <span className="text-cyan-400 font-bold text-sm">
+                        {userData.rank}. {userData.email.split('@')[0]}
+                      </span>
+                      <div className="flex space-x-4">
+                        <span className="w-16 text-center text-yellow-400 font-bold text-sm">{userData.accuracy?.toFixed(1)}%</span>
+                        <span className="w-16 text-center text-green-400 font-bold text-sm">{userData.exercises_count}</span>
+                      </div>
+                    </div>
+                  ) : null
                 )}
               </CardContent>
             )}
@@ -2682,12 +2911,18 @@ export default function DashboardPage() {
         <div className="fixed inset-0 flex items-center justify-center z-50">
           <div
             className="fixed inset-0 bg-black bg-opacity-75 backdrop-blur-sm"
-            onClick={() => setSongDetails(null)}
+            onClick={() => {
+              setSongDetails(null);
+              setShowCommentsModal(false);
+            }}
           ></div>
           <div className="relative bg-gradient-to-br from-indigo-900 to-black p-6 rounded-xl shadow-2xl transform transition-all duration-500 scale-100 max-w-xl w-full border-4 border-pink-500 animate-fadeIn shadow-lg shadow-pink-500/30">
             <button
               className="absolute top-3 right-3 text-white text-2xl hover:text-pink-300 bg-pink-800 hover:bg-pink-700 rounded-full w-8 h-8 flex items-center justify-center transition-colors"
-              onClick={() => setSongDetails(null)}
+              onClick={() => {
+                setSongDetails(null);
+                setShowCommentsModal(false);
+              }}
             >
               ×
             </button>
@@ -2696,106 +2931,188 @@ export default function DashboardPage() {
                 <span className="neon-text">Now Playing</span>
               </div>
             </div>
-            <div className="pt-16">
-              <div className="w-full h-64 mb-5 rounded-lg overflow-hidden shadow-lg border-2 border-cyan-500">
-                {songDetails.youtube ? (
-                  <iframe
-                    src={`https://www.youtube.com/embed/${extractYoutubeId(songDetails.youtube)}?autoplay=1`}
-                    className="w-full h-full"
-                    frameBorder="0"
-                    allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  ></iframe>
-                ) : (
-                  <div className="flex items-center justify-center w-full h-full bg-gradient-to-r from-pink-900 to-indigo-900 rounded-lg">
-                    <p className="text-white font-bold">Video unavailable</p>
-                  </div>
-                )}
-              </div>
-              <div className="flex items-start space-x-5">
-                {songDetails.pic && (
-                  <div className="flex-shrink-0">
-                    <img
-                      src={songDetails.pic}
-                      alt={songDetails.album || "Album Cover"}
-                      className="w-32 h-32 rounded-lg object-cover shadow-lg border-2 border-yellow-400"
-                    />
-                  </div>
-                )}
-                <div className="flex-1">
-                  <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-cyan-500">
-                    {songDetails.name}
-                  </h2>
-                  <p className="text-xl text-yellow-400 mb-1 font-bold">{songDetails.artist}</p>
-                  {songDetails.album && (
-                    <p className="text-sm text-pink-500 mb-3 font-bold">Album: {songDetails.album}</p>
-                  )}
-                  <div className="flex space-x-4 text-xs text-cyan-400 mb-3">
-                    <div className="flex items-center">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-4 w-4 mr-1"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-                        />
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                        />
-                      </svg>
-                      {Math.floor(Math.random() * 1000) + 100}K
-                    </div>
-                    <div className="flex items-center">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-4 w-4 mr-1"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-                        />
-                      </svg>
-                      {Math.floor(Math.random() * 100) + 10}K
-                    </div>
-                  </div>
-                  {songDetails.genres && songDetails.genres.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {songDetails.genres.map((genre: string, index: number) => (
-                        <span
-                          key={index}
-                          className="px-3 py-1 bg-gradient-to-r from-indigo-900 to-indigo-700 hover:from-indigo-700 hover:to-indigo-600 rounded-full text-sm text-white transition-colors shadow-md border border-cyan-500"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSongDetails(null);
-                            fetchSongsForGenre(genre);
-                          }}
-                          style={{ cursor: "pointer" }}
-                        >
-                          {genre}
-                        </span>
-                      ))}
+            
+            {/* Main Content - conditionally hide when comments modal is shown */}
+            {!showCommentsModal && (
+              <div className="pt-16">
+                <div className="w-full h-64 mb-5 rounded-lg overflow-hidden shadow-lg border-2 border-cyan-500">
+                  {songDetails.youtube ? (
+                    <iframe
+                      src={`https://www.youtube.com/embed/${extractYoutubeId(songDetails.youtube)}?autoplay=1`}
+                      className="w-full h-full"
+                      frameBorder="0"
+                      allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    ></iframe>
+                  ) : (
+                    <div className="flex items-center justify-center w-full h-full bg-gradient-to-r from-pink-900 to-indigo-900 rounded-lg">
+                      <p className="text-white font-bold">Video unavailable</p>
                     </div>
                   )}
                 </div>
+                <div className="flex items-start space-x-5">
+                  {songDetails.pic && (
+                    <div className="flex-shrink-0">
+                      <img
+                        src={songDetails.pic}
+                        alt={songDetails.album || "Album Cover"}
+                        className="w-32 h-32 rounded-lg object-cover shadow-lg border-2 border-yellow-400"
+                      />
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-cyan-500">
+                      {songDetails.name}
+                    </h2>
+                    <p className="text-xl text-yellow-400 mb-1 font-bold">{songDetails.artist}</p>
+                    {songDetails.album && (
+                      <p className="text-sm text-pink-500 mb-3 font-bold">Album: {songDetails.album}</p>
+                    )}
+                    <div className="flex space-x-4 text-xs mb-3">
+                      <div className="flex items-center">
+                        <button 
+                          className={`mr-2 flex items-center gap-1 px-3 py-1 rounded-full ${
+                            userLiked 
+                              ? 'bg-red-900 text-white border border-red-500' 
+                              : 'bg-gray-800 text-gray-300 border border-gray-700 hover:bg-gray-700'
+                          }`}
+                          onClick={handleLike}
+                          disabled={userLiked}
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className={`h-4 w-4 ${userLiked ? 'text-red-400' : 'text-gray-400'}`}
+                            fill={userLiked ? "currentColor" : "none"}
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+                            />
+                          </svg>
+                          <span>{likeCount}</span>
+                        </button>
+                      </div>
+                      
+                      <button 
+                        className="flex items-center gap-1 px-3 py-1 rounded-full bg-cyan-900 text-white border border-cyan-500 hover:bg-cyan-800"
+                        onClick={() => setShowCommentsModal(true)}
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          className="h-4 w-4 text-cyan-400"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+                          />
+                        </svg>
+                        <span>{comments.length} Comments</span>
+                      </button>
+                    </div>
+                    {songDetails.genres && songDetails.genres.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {songDetails.genres.map((genre: string, index: number) => (
+                          <span
+                            key={index}
+                            className="px-3 py-1 bg-gradient-to-r from-indigo-900 to-indigo-700 hover:from-indigo-700 hover:to-indigo-600 rounded-full text-sm text-white transition-colors shadow-md border border-cyan-500"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSongDetails(null);
+                              fetchSongsForGenre(genre);
+                            }}
+                            style={{ cursor: "pointer" }}
+                          >
+                            {genre}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-6 text-center text-cyan-400 text-sm bg-indigo-900 bg-opacity-50 rounded-lg py-2 border border-cyan-500">
+                  Explore the related genres in 3D behind this window
+                </div>
               </div>
-              <div className="mt-6 text-center text-cyan-400 text-sm bg-indigo-900 bg-opacity-50 rounded-lg py-2 border border-cyan-500">
-                Explore the related genres in 3D behind this window
+            )}
+            
+            {/* Comments Modal */}
+            {showCommentsModal && (
+              <div className="pt-16 px-2">
+                <div className="flex justify-between items-center mb-4 sticky top-0 z-10 py-2">
+                  <button
+                    className="flex items-center gap-1 text-cyan-400 hover:text-cyan-300"
+                    onClick={() => setShowCommentsModal(false)}
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-5 w-5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15 19l-7-7 7-7"
+                      />
+                    </svg>
+                    <span>Back to Song</span>
+                  </button>
+                </div>
+                
+                {/* Comments list */}
+                <div className="space-y-3 max-h-72 overflow-y-auto mb-6 pr-2">
+                  {!comments || comments.length === 0 ? (
+                    <p className="text-xl text-gray-400 text-center italic p-8">No comments yet. Be the first to share your thoughts!</p>
+                  ) : (
+                    comments.map(comment => (
+                      <div key={comment.id} className="p-4 bg-gray-800/80 rounded border-l-4 border-cyan-500">
+                        <div className="flex flex-col">
+                          <div className="flex justify-between items-center mb-1">
+                            <p className="text-lg font-semibold text-cyan-300">
+                              {comment.userId || "Anonymous User"}
+                            </p>
+                            <span className="text-sm text-gray-500">
+                              {typeof comment.timestamp === 'string' 
+                                ? new Date(comment.timestamp).toLocaleString() 
+                                : 'Just now'}
+                            </span>
+                          </div>
+                          <p className="text-lg text-gray-200">{comment.text}</p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+                
+                {/* Add comment input */}
+                <div className="flex flex-col gap-3">
+                  <textarea 
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    placeholder="Add your comment..." 
+                    className="w-full p-3 rounded bg-gray-800 border border-gray-700 text-xl text-white resize-none h-24"
+                  />
+                  <button 
+                    onClick={handleAddComment}
+                    className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white text-xl font-bold py-3 rounded-md"
+                    disabled={newComment.trim() === ""}
+                  >
+                    Post Comment
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}

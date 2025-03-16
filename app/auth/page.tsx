@@ -80,7 +80,7 @@ export default function AuthPage() {
       <ThreeJSBackground />
       
       {/* Grid pattern background similar to landing page */}
-      <div className="absolute inset-0 z-0 bg-grid-pattern opacity-20"></div>
+      <div className="absolute inset-0 z-0 bg-grid-pattern opacity-100"></div>
       
       {/* Overlay with darker gradient */}
       <div className="absolute inset-0 bg-gradient-to-br from-black via-indigo-950/60 to-black backdrop-blur-sm z-10" />

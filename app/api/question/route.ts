@@ -59,16 +59,6 @@ export async function GET(request: NextRequest) {
 
     const tagsRecord = songTagsResult.records[0];
 
-    // Fetch random eras, genres using separate sessions
-    const eraQuery = (label: string, number: string) => `
-      MATCH (t:${label})
-      RETURN 
-        t.tag AS name,
-        t.description AS description 
-      ORDER BY rand()
-      LIMIT ${number}
-    `;
-
     const genreQuery = (label: string, number: string) => `
       MATCH (t:${label})
       RETURN 
@@ -82,8 +72,7 @@ export async function GET(request: NextRequest) {
     const genresSession = getSession();
     const erasSession = getSession();
 
-    const [erasResult, genresResult] = await Promise.all([
-      erasSession.run(eraQuery("Era", "2")),
+    const [genresResult] = await Promise.all([
       genresSession.run(genreQuery("Genre", "6")),
     ]);
 
@@ -134,26 +123,10 @@ export async function GET(request: NextRequest) {
       ];
     };
 
-    // Ensure these are always arrays
-    const eras = tagsRecord.get("eras") || [];
     const genres = tagsRecord.get("genres") || [];
-
-    console.log(erasResult)
-    console.log(genresResult)
 
     // Prepare questions for each aspect
     const questions = [
-      {
-        type: "Era",
-        youtube: record.get("youtube"),
-        title: record.get("name"),
-        artist: record.get("artist"),
-        album: record.get("album"),
-        explanation: record.get('explanation'),
-        question: "Which era best fits the song?",
-        options: formatOptions(erasResult, eras),
-        correctAnswers: eras,
-      },
       {
         type: "Genre",
         youtube: record.get("youtube"),
