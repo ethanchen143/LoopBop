@@ -3125,7 +3125,7 @@ export default function DashboardPage() {
           100% { opacity: 0; visibility: hidden; }
         }
         .animate-fade-out {
-          animation: fadeOut 4s forwards;
+          animation: fadeOut 10s forwards;
         }
         @keyframes fadeIn {
           0% { opacity: 0; transform: scale(0.95); }
