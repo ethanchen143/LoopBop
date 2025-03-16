@@ -256,7 +256,7 @@ export default function LandingPage() {
                 <h3 className="text-2xl font-bold text-cyan-400">Privacy Policy</h3>
               </div>
               <p className="text-gray-300 mb-4">
-                At LoopBop, we're committed to protecting your privacy while providing an engaging music learning experience. This policy explains our data practices and your rights.
+                At LoopBop, we&apos;re committed to protecting your privacy while providing an engaging music learning experience. This policy explains our data practices and your rights.
               </p>
             </section>
             
@@ -276,7 +276,7 @@ export default function LandingPage() {
                 </ul>
               </div>
               <p className="text-gray-300">
-                LoopBop operates on a privacy-first principle. We don't need or want your personal information to provide you with a great music learning experience.
+                LoopBop operates on a privacy-first principle. We don&apos;t need or want your personal information to provide you with a great music learning experience.
               </p>
             </section>
             
