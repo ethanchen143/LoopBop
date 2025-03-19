@@ -21,6 +21,7 @@
       "./types"
     ],
     "incremental": true,
+    "allowImportingTsExtensions": true,
     "plugins": [
       {
         "name": "next"

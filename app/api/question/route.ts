@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
     const songTitle = url.searchParams.get("song"); // Get the song title from query parameters
     const mainSession = getSession();
-
+    
     // Query to fetch either a specific song or a random one
     const songQuery = songTitle
       ? `

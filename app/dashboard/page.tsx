@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { X, Music, Trophy, Search, Home } from 'lucide-react';
+import { Zap, Play, X, Music, Trophy, Search, Home } from 'lucide-react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+import io, { Socket } from 'socket.io-client';
 
 // Define interfaces
 interface UserData {
@@ -121,6 +122,15 @@ export default function DashboardPage() {
   const [userLiked, setUserLiked] = useState(false);
   const [showCommentsModal, setShowCommentsModal] = useState(false);
 
+  const [showBattleModal, setShowBattleModal] = useState(false);
+  const [battleMode, setBattleMode] = useState<"join" | "create" | "waiting" | null>(null);
+  const [joinCode, setJoinCode] = useState("");
+  const [roomCode, setRoomCode] = useState("");
+  const [players, setPlayers] = useState<{id: string, name: string, isCreator?: boolean}[]>([]);
+  const [songCount, setSongCount] = useState<4 | 8 | 16>(4);
+  const [isCreator, setIsCreator] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
   // Canvas refs
   const mountRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -128,6 +138,8 @@ export default function DashboardPage() {
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+
+  const socketRef = useRef<Socket | null>(null);
 
   const MAIN_VIEW_CAMERA_POSITION = new THREE.Vector3(0, 20, 25);
   const ALBUM_VIEW_TARGET_POSITION = new THREE.Vector3(0, 15, 30);
@@ -2535,7 +2547,7 @@ export default function DashboardPage() {
     }
     window.floatingAnimations.push(window.orbitAnimationId);
   };
-
+ 
   // handle Click
   useEffect(() => {
     if (!mountRef.current || loading) return;
@@ -2672,6 +2684,314 @@ export default function DashboardPage() {
     };
   }, [loading, sceneRef.current, cameraRef.current, rendererRef.current,currentView,fetchSongDetails, fetchSongsForGenre, returnToMainView]);
 
+  
+  const initSocket = async () => {
+    try {
+      // Make sure the socket server is running
+      await fetch('/api/socket');
+      
+      // Create socket connection if not already connected
+      if (!socketRef.current) {
+        console.log('Initializing new socket connection');
+        const socket = io({
+          path: '/api/socket',
+          reconnectionAttempts: 5,
+          reconnectionDelay: 1000,
+          transports: ['polling', 'websocket']
+        });
+        
+        // Set up better error handling
+        socket.on('connect_error', (error) => {
+          console.error('Socket connection error:', error);
+          setError('Unable to connect to game server');
+        });
+        
+        // Basic connection handlers
+        socket.on('connect', () => {
+          console.log('Connected to socket server with ID:', socket.id);
+        });
+        
+        socket.on('disconnect', (reason) => {
+          console.log('Disconnected from socket server. Reason:', reason);
+        });
+        
+        socketRef.current = socket;
+      }
+      
+      return socketRef.current;
+    } catch (error) {
+      console.error('Failed to initialize socket:', error);
+      throw error;
+    }
+  };
+
+  useEffect(() => {
+    // Socket setup function
+    const setupSocket = async () => {
+      try {
+        // Ensure socket is initialized
+        const socket = await initSocket();
+        
+        // Clear any existing event handlers to prevent duplicates
+        socket.off('room-created');
+        socket.off('room-joined');
+        socket.off('player-joined');
+        socket.off('player-left');
+        socket.off('game-started');
+        socket.off('error');
+        
+        // Set up event handlers with better debugging
+        socket.on('room-created', (data) => {
+          console.log('Room created event received:', data);
+          setPlayers(data.players);
+          setRoomCode(data.roomCode);
+        });
+        
+        socket.on('room-joined', (data) => {
+          console.log('Room joined event received:', data);
+          setPlayers(data.players);
+          setRoomCode(data.roomCode);
+          // Update other room state as needed
+          setSongCount(data.songCount);
+        });
+        
+        socket.on('player-joined', (data) => {
+          console.log('Player joined event received:', data);
+          // Make sure we're updating with the latest players data
+          setPlayers(data.players);
+        });
+        
+        socket.on('player-left', (data) => {
+          console.log('Player left event received:', data);
+          setPlayers(prev => prev.filter(player => player.id !== data.userId));
+        });
+        
+        socket.on('game-started', () => {
+          console.log('Game started event received, redirecting to battle room');
+          router.push(`/battle/${roomCode}`);
+        });
+        
+        socket.on('error', (error) => {
+          console.error('Socket error received:', error);
+          setError(error.message);
+        });
+      } catch (error) {
+        console.error('Error in setupSocket:', error);
+        setError('Failed to connect to game server');
+      }
+    };
+  
+    if (showBattleModal) {
+      setupSocket();
+    }
+  
+    // Cleanup function
+    return () => {
+      // Don't disconnect the socket here, just remove event listeners
+      if (socketRef.current) {
+        socketRef.current.off('room-created');
+        socketRef.current.off('room-joined');
+        socketRef.current.off('player-joined');
+        socketRef.current.off('player-left');
+        socketRef.current.off('game-started');
+        socketRef.current.off('error');
+      }
+    };
+  }, [showBattleModal, roomCode]);
+
+  // Add a separate useEffect for socket cleanup on component unmount
+  useEffect(() => {
+    return () => {
+      if (socketRef.current) {
+        console.log('Disconnecting socket on component unmount');
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleCreateGame = async () => {
+    setIsLoading(true);
+    setError(""); // Clear any previous errors
+    
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        setError("Authentication required");
+        setIsLoading(false);
+        return;
+      }
+
+      // Ensure socket is connected
+      const socket = await initSocket();
+      
+      console.log('Emitting create-room event with:', {
+        userId: userData.email,
+        songCount,
+        token
+      });
+      
+      // Create room via socket
+      socket.emit('create-room', {
+        userId: userData.email,
+        songCount,
+        token
+      });
+      
+      // Add timeout for error handling
+      const timeoutId = setTimeout(() => {
+        setError("Room creation timed out. Please try again.");
+        setIsLoading(false);
+      }, 10000);
+      
+      // Listen for room creation confirmation just once
+      socket.once('room-created', (data) => {
+        console.log('Room created successfully:', data);
+        clearTimeout(timeoutId);
+        setRoomCode(data.roomCode);
+        setPlayers(data.players);
+        setBattleMode("waiting");
+        setIsCreator(true);
+        setIsLoading(false);
+      });
+      
+      // Listen for errors
+      socket.once('error', (error) => {
+        console.error('Error creating room:', error);
+        clearTimeout(timeoutId);
+        setError(error.message || "Failed to create game");
+        setIsLoading(false);
+      });
+    } catch (error) {
+      console.error("Error creating game:", error);
+      setError("An unexpected error occurred");
+      setIsLoading(false);
+    }
+  };
+
+  // Similarly update the handleJoinGame function
+  const handleJoinGame = async () => {
+    if (!joinCode.trim()) {
+      setError("Please enter a room code");
+      return;
+    }
+
+    setIsLoading(true);
+    setError(""); // Clear any previous errors
+    
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        setError("Authentication required");
+        setIsLoading(false);
+        return;
+      }
+
+      // Ensure socket is connected
+      const socket = await initSocket();
+      
+      console.log('Emitting join-room event with:', {
+        roomCode: joinCode.trim(),
+        userId: userData.email,
+        token
+      });
+      
+      // Join room via socket
+      socket.emit('join-room', {
+        roomCode: joinCode.trim(),
+        userId: userData.email,
+        token
+      });
+      
+      // Add timeout for error handling
+      const timeoutId = setTimeout(() => {
+        setError("Join room request timed out. Please try again.");
+        setIsLoading(false);
+      }, 10000);
+      
+      // Listen for room join confirmation just once
+      socket.once('room-joined', (data) => {
+        console.log('Room joined successfully:', data);
+        clearTimeout(timeoutId);
+        setRoomCode(data.roomCode);
+        setPlayers(data.players);
+        setBattleMode("waiting");
+        setIsCreator(false);
+        setIsLoading(false);
+      });
+      
+      // Listen for errors
+      socket.once('error', (error) => {
+        console.error('Error joining room:', error);
+        clearTimeout(timeoutId);
+        setError(error.message || "Failed to join game");
+        setIsLoading(false);
+      });
+    } catch (error) {
+      console.error("Error joining game:", error);
+      setError("An unexpected error occurred");
+      setIsLoading(false);
+    }
+  };
+
+  // Update the closeBattleModal function to handle socket cleanup better
+  const closeBattleModal = () => {
+    // If creator, close the room via socket
+    if (isCreator && roomCode && socketRef.current) {
+      console.log('Emitting close-room event for room:', roomCode);
+      socketRef.current.emit('close-room');
+    }
+    
+    // Don't disconnect, just remove event listeners
+    if (socketRef.current) {
+      socketRef.current.off('room-created');
+      socketRef.current.off('room-joined');
+      socketRef.current.off('player-joined');
+      socketRef.current.off('player-left');
+      socketRef.current.off('game-started');
+      socketRef.current.off('error');
+    }
+
+    // Reset all state
+    setShowBattleModal(false);
+    setBattleMode(null);
+    setJoinCode("");
+    setRoomCode("");
+    setPlayers([]);
+    setIsCreator(false);
+    setError("");
+    setIsLoading(false);
+  };
+
+  const startBattleGame = () => {
+    if (players.length < 2) {
+      setError("At least 2 players required to start");
+      return;
+    }
+  
+    setIsLoading(true);
+    
+    if (socketRef.current) {
+      // Start game via socket
+      socketRef.current.emit('start-game');
+      
+      // Listen for game start confirmation
+      socketRef.current.once('game-started', () => {
+        setIsLoading(false);
+        router.push(`/battle/${roomCode}`);
+      });
+      
+      // Listen for errors
+      socketRef.current.once('error', (error) => {
+        setError(error.message || "Failed to start game");
+        setIsLoading(false);
+      });
+    } else {
+      setError("Socket connection not established");
+      setIsLoading(false);
+    }
+  };
+  
   // Display loading and error states
   if (loading) {
     return (
@@ -2742,12 +3062,12 @@ export default function DashboardPage() {
             <CardHeader className="p-2 flex flex-row items-center justify-between">
               <CardTitle className="flex items-center">
                 <Music className="h-5 w-5 text-cyan-400 mr-2" />
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 to-yellow-400">Game</span>
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 to-yellow-400">Practice</span>
               </CardTitle>
             </CardHeader>
             <CardContent className="p-2">
               <div className="flex flex-col space-y-2">
-                <div className="text-sm">Completed Songs: <span className="font-bold text-yellow-400">{userData.exercises_count}</span></div>
+                <div className="text-sm">Completed: <span className="font-bold text-yellow-400">{userData.exercises_count}</span></div>
                 <div className="text-sm">Average Score: <span className="font-bold text-yellow-400">{(accuracy / 100).toFixed()}%</span></div>
                 <Progress
                   value={totalExercises}
@@ -2764,13 +3084,36 @@ export default function DashboardPage() {
                     router.push(`/practice`);
                   }}
                 >
-                  Start Game
+                  Start Exercise
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="w-64 border-4 border-purple-600 bg-black bg-opacity-80 backdrop-blur-md text-white shadow-lg shadow-purple-500/50 rounded-lg overflow-hidden">
+            <CardHeader className="p-2 flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center">
+                <Zap className="h-5 w-5 text-yellow-400 mr-2" />
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-500 to-red-500">Game</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-2">
+              <div className="flex flex-col space-y-2">
+                <Button
+                  size="sm"
+                  className="mt-2 bg-gradient-to-r from-red-500 via-purple-600 to-blue-600 hover:from-red-600 hover:via-purple-700 hover:to-blue-700 text-white font-bold border-2 border-white pulsate-button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowBattleModal(true);
+                  }}
+                >
+                  <Play className="h-4 w-4 mr-1" />
+                  START GAME
                 </Button>
               </div>
             </CardContent>
           </Card>
         </div>
-  
+
         {/* Explore Panel - Bottom Left */}
         <div className="absolute bottom-4 left-4 space-y-4 z-20">
           <Card
@@ -2848,9 +3191,9 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <ul className="space-y-2 text-sm">
-                  {leaderboard.slice(0, 5).map((entry, index) => (
+                  {leaderboard.slice(0, 5).map((entry) => (
                     <li
-                      key={index}
+                      key={entry.email}
                       className={`flex justify-between items-center p-2 rounded ${
                         entry.email === userData.email ? 'bg-gradient-to-r from-pink-500/30 to-indigo-900/70 border-2 border-pink-500' : 'bg-indigo-900/30'
                       }`}
@@ -2905,7 +3248,264 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
-  
+
+      {/* Battle Mode Modal */}
+      {showBattleModal && (
+        <div className="fixed inset-0 flex items-center justify-center z-50">
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-75 backdrop-blur-sm"
+            onClick={closeBattleModal}
+          ></div>
+          <div className="relative bg-gradient-to-br from-indigo-900 to-black p-6 rounded-xl shadow-2xl transform transition-all duration-500 scale-100 max-w-md w-full border-4 border-purple-500 animate-fadeIn shadow-lg shadow-purple-500/30">
+            <button
+              className="absolute top-3 right-3 text-white text-2xl hover:text-pink-300 bg-purple-800 hover:bg-purple-700 rounded-full w-8 h-8 flex items-center justify-center transition-colors"
+              onClick={closeBattleModal}
+            >
+              ×
+            </button>
+            
+            <div className="absolute top-0 left-0 right-0 h-14 bg-gradient-to-r from-purple-600 to-blue-800 rounded-t-xl flex items-center px-4 border-b-2 border-purple-500">
+              <div className="flex-1 text-center text-white font-bold text-lg">
+                <span className="neon-text">Game Options</span>
+              </div>
+            </div>
+            
+            <div className="pt-16 px-2">
+              {/* Initial selection screen */}
+              {!battleMode && (
+                <div className="flex flex-col gap-6">
+                  
+                  <div className="flex flex-col gap-4">
+                    <button 
+                      className="bg-gradient-to-r from-purple-600 to-blue-700 hover:from-purple-700 hover:to-blue-800 text-white text-xl font-bold py-3 px-4 rounded-md shadow-lg shadow-purple-700/30 flex items-center justify-center"
+                      onClick={() => setBattleMode("create")}
+                    >
+                      Create Game
+                    </button>
+                    
+                    <button 
+                      className="bg-gradient-to-r from-pink-600 to-purple-700 hover:from-pink-700 hover:to-purple-800 text-white text-xl font-bold py-3 px-4 rounded-md shadow-lg shadow-pink-700/30 flex items-center justify-center"
+                      onClick={() => setBattleMode("join")}
+                    >
+                      Join Game
+                    </button>
+                  </div>
+                </div>
+              )}
+              
+              {/* Create game options */}
+              {battleMode === "create" && (
+                <div className="flex flex-col gap-5">
+                  <div className="bg-indigo-900/30 rounded-lg p-4 border border-purple-500">
+                    <h3 className="text-lg font-bold text-purple-300 mb-3">Select Number of Songs</h3>
+                    
+                    <div className="flex justify-between gap-3">
+                      <button 
+                        className={`flex-1 py-2 px-3 rounded-md font-bold transition-all ${songCount === 4 ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}`}
+                        onClick={() => setSongCount(4)}
+                      >
+                        4 Songs
+                        <div className="text-xs mt-1 text-purple-300">Quick Game</div>
+                      </button>
+                      
+                      <button 
+                        className={`flex-1 py-2 px-3 rounded-md font-bold transition-all ${songCount === 8 ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}`}
+                        onClick={() => setSongCount(8)}
+                      >
+                        8 Songs
+                        <div className="text-xs mt-1 text-purple-300">Standard</div>
+                      </button>
+                      
+                      <button 
+                        className={`flex-1 py-2 px-3 rounded-md font-bold transition-all ${songCount === 16 ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}`}
+                        onClick={() => setSongCount(16)}
+                      >
+                        16 Songs
+                        <div className="text-xs mt-1 text-purple-300">Ultimate</div>
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <button 
+                    className="bg-gradient-to-r from-green-600 to-blue-700 hover:from-green-700 hover:to-blue-800 text-white text-xl font-bold py-3 px-4 rounded-md shadow-lg shadow-green-700/30 flex items-center justify-center mt-3"
+                    onClick={handleCreateGame}
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <span className="flex items-center">
+                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Creating...
+                      </span>
+                    ) : (
+                      <>Create Room</>
+                    )}
+                  </button>
+                  
+                  <button 
+                    className="bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-md mt-2"
+                    onClick={() => setBattleMode(null)}
+                  >
+                    Back
+                  </button>
+                </div>
+              )}
+              
+              {/* Join game screen */}
+              {battleMode === "join" && (
+                <div className="flex flex-col gap-5">                  
+                  <div className="bg-indigo-900/30 rounded-lg p-4 border border-purple-500">
+                    <label className="text-lg font-bold text-purple-300 mb-2 block">Enter Room Code</label>
+                    
+                    <input
+                      type="text"
+                      value={joinCode}
+                      onChange={(e) => setJoinCode(e.target.value)}
+                      placeholder="Enter 6-digit code"
+                      className="w-full bg-gray-800 border border-purple-600 rounded-md px-4 py-3 text-white text-xl tracking-wider focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      maxLength={6}
+                    />
+                  </div>
+                  
+                  <button 
+                    className="bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white text-xl font-bold py-3 px-4 rounded-md shadow-lg shadow-blue-700/30 flex items-center justify-center mt-3"
+                    onClick={handleJoinGame}
+                    disabled={isLoading || !joinCode.trim()}
+                  >
+                    {isLoading ? (
+                      <span className="flex items-center">
+                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Joining...
+                      </span>
+                    ) : (
+                      <>Join Game</>
+                    )}
+                  </button>
+                  
+                  <button 
+                    className="bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-md mt-2"
+                    onClick={() => setBattleMode(null)}
+                  >
+                    Back
+                  </button>
+                </div>
+              )}
+              
+              {/* Waiting room (for both creator and joiners) */}
+              {battleMode === "waiting" && (
+                <div className="flex flex-col gap-5">
+                  <h2 className="text-2xl font-bold text-center text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">
+                    Battle Room
+                  </h2>
+                  
+                  {isCreator && (
+                    <div className="bg-indigo-900/60 rounded-lg p-4 border border-purple-500 text-center">
+                      <h3 className="text-xl font-bold text-yellow-300 mb-2">Your Room Code</h3>
+                      <div className="bg-black py-3 px-2 rounded-md border border-purple-400">
+                        <span className="text-3xl font-mono font-bold tracking-widest text-white">{roomCode}</span>
+                      </div>
+                      <p className="text-purple-300 text-sm mt-2">Share this code with friends to join the battle</p>
+                    </div>
+                  )}
+                  
+                  <div className="bg-indigo-900/30 rounded-lg p-4 border border-purple-500">
+                    <div className="flex justify-between items-center mb-3">
+                      <h3 className="text-lg font-bold text-purple-300">Players in Room</h3>
+                      <div className="text-cyan-400 text-sm">
+                        {players.length} {players.length === 1 ? 'player' : 'players'}
+                      </div>
+                    </div>
+                    
+                    <div className="max-h-48 overflow-y-auto pr-2">
+                      {players.length === 0 ? (
+                        <div className="text-center py-6 text-gray-400">
+                          Waiting for players to join...
+                        </div>
+                      ) : (
+                        <ul className="space-y-2">
+                          {players.map((player, index) => (
+                            <li
+                              key={player.id || `player-${index}`} // Fallback to index if id is missing
+                              className="flex justify-between items-center p-3 bg-indigo-900/50 rounded-lg border border-indigo-700"
+                            >
+                              <span className="text-white font-semibold">{player.name}</span>
+                              {player.isCreator && (
+                                <span className="text-xs px-2 py-1 bg-purple-700 text-white rounded-full">
+                                  Host
+                                </span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                    
+                    <div className="text-center text-sm text-cyan-300 mt-3">
+                      <div className="flex justify-center items-center">
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-cyan-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Waiting for more players...
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex-1 flex flex-col">
+                    <div className="text-sm text-center text-gray-400 mb-3">
+                      {isCreator 
+                        ? "You can start the game once at least 2 players have joined"
+                        : "Waiting for the host to start the game..."}
+                    </div>
+                    
+                    {isCreator && (
+                      <button 
+                        className={`py-3 px-4 rounded-md text-xl font-bold ${
+                          players.length >= 2
+                            ? "bg-gradient-to-r from-green-600 to-blue-700 hover:from-green-700 hover:to-blue-800 text-white shadow-lg shadow-green-700/30"
+                            : "bg-gray-700 text-gray-400 cursor-not-allowed"
+                        }`}
+                        onClick={startBattleGame}
+                        disabled={players.length < 2 || isLoading}
+                      >
+                        {isLoading ? (
+                          <span className="flex items-center justify-center">
+                            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Starting...
+                          </span>
+                        ) : (
+                          "START BATTLE"
+                        )}
+                      </button>
+                    )}
+                  </div>
+                  
+                  <div className="text-xs text-gray-400 text-center mt-2">
+                    {songCount === 4 ? 'Quick Game: 4 Songs' : 
+                    songCount === 8 ? 'Standard Game: 8 Songs' : 
+                    'Ultimate Game: 16 Songs'}
+                  </div>
+                </div>
+              )}
+              
+              {error && (
+                <div className="mt-4 p-3 bg-red-900/50 border border-red-500 rounded-md text-white text-center">
+                  {error}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Song Details Modal */}
       {songDetails && (
         <div className="fixed inset-0 flex items-center justify-center z-50">
@@ -3022,7 +3622,7 @@ export default function DashboardPage() {
                       <div className="flex flex-wrap gap-2">
                         {songDetails.genres.map((genre: string, index: number) => (
                           <span
-                            key={index}
+                            key={genre + '-' + index}
                             className="px-3 py-1 bg-gradient-to-r from-indigo-900 to-indigo-700 hover:from-indigo-700 hover:to-indigo-600 rounded-full text-sm text-white transition-colors shadow-md border border-cyan-500"
                             onClick={(e) => {
                               e.stopPropagation();

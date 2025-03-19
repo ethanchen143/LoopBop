@@ -143,7 +143,7 @@ export default function ExplorePage() {
         
         <div className="flex flex-col md:flex-row gap-4 w-full">
           {/* Left Sidebar - Categories */}
-          <motion.div variants={itemVariants} className="w-full md:w-1/4">
+          <motion.div variants={itemVariants} className="w-full md:w-1/6">
             <Card className="backdrop-blur-md bg-black/50 border border-pink-500/30 shadow-xl">
               <CardHeader className="pb-3">
                 <CardTitle className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-pink-500 text-xl">

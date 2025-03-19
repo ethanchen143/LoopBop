@@ -273,13 +273,20 @@ export default function PracticePage() {
   
   // Container dimensions for force field
   const [containerDimensions, setContainerDimensions] = useState({ width: 800, height: 400 });
-  
+
+  interface SearchParams {
+    song: string;
+  }
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const rawSearchParams = useSearchParams();
+  const searchParams: SearchParams = {
+    song: rawSearchParams?.get('song') || '',
+  };
+  
   const containerRef = useRef<HTMLDivElement>(null);
   const forceFieldContainerRef = useRef<HTMLDivElement>(null);
 
-  const songTitle = searchParams.get("song") || "";
+  const songTitle = searchParams.song || "";
 
   // Available mood options
   const moodOptions = [

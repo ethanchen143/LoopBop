@@ -98,10 +98,10 @@ export default function LandingPage() {
             
             <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
               {[
-                { count: "10K+", label: "ACTIVE USERS" },
-                { count: "500+", label: "ARTISTS" },
+                { count: "100+", label: "ACTIVE USERS" },
+                { count: "100+", label: "ARTISTS" },
                 { count: "100+", label: "MUSIC GENRES" },
-                { count: "10K+", label: "SONGS" }
+                { count: "100+", label: "SONGS" }
               ].map((stat, index) => (
                 <div key={index} className="flex flex-col items-center">
                   <span className="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-cyan-400">
