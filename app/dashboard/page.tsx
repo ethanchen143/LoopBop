@@ -3209,18 +3209,18 @@ export default function DashboardPage() {
                   ))}
                 </ul>
                 {userData && userData.email && (
-                  leaderboard.findIndex(entry => entry.email === userData.email) >= 5 ? (
-                    <div className="mt-3 p-2 bg-indigo-900/30 rounded flex justify-between items-center">
-                      <span className="text-cyan-400 font-bold text-sm">
-                        {userData.rank}. {userData.email.split('@')[0]}
-                      </span>
-                      <div className="flex space-x-4">
-                        <span className="w-16 text-center text-yellow-400 font-bold text-sm">{userData.accuracy?.toFixed(1)}%</span>
-                        <span className="w-16 text-center text-green-400 font-bold text-sm">{userData.exercises_count}</span>
-                      </div>
+                !leaderboard.slice(0, 5).some(entry => entry.email === userData.email) ? (
+                  <div className="mt-3 p-2 bg-indigo-900/30 rounded flex justify-between items-center">
+                    <span className="text-cyan-400 font-bold text-sm">
+                      {userData.rank ? `${userData.rank}.` : ""} {userData.email.split('@')[0]}
+                    </span>
+                    <div className="flex space-x-4">
+                      <span className="w-16 text-center text-yellow-400 font-bold text-sm">{userData.accuracy?.toFixed(1)}%</span>
+                      <span className="w-16 text-center text-green-400 font-bold text-sm">{userData.exercises_count}</span>
                     </div>
-                  ) : null
-                )}
+                  </div>
+                ) : null
+              )}
               </CardContent>
             )}
           </Card>
@@ -3398,11 +3398,7 @@ export default function DashboardPage() {
               
               {/* Waiting room (for both creator and joiners) */}
               {battleMode === "waiting" && (
-                <div className="flex flex-col gap-5">
-                  <h2 className="text-2xl font-bold text-center text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">
-                    Battle Room
-                  </h2>
-                  
+                <div className="flex flex-col gap-5">                  
                   {isCreator && (
                     <div className="bg-indigo-900/60 rounded-lg p-4 border border-purple-500 text-center">
                       <h3 className="text-xl font-bold text-yellow-300 mb-2">Your Room Code</h3>

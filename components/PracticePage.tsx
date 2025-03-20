@@ -354,6 +354,22 @@ export default function PracticePage() {
     return "from-red-500 to-red-600";
   };
 
+  const handleYouTubeReady = () => {
+    // Wait a small delay after video is ready before recalculating
+    setTimeout(() => {
+      if (forceFieldContainerRef.current) {
+        const rect = forceFieldContainerRef.current.getBoundingClientRect();
+        
+        if (rect.width > 0 && rect.height > 0) {
+          setContainerDimensions({
+            width: rect.width,
+            height: rect.height
+          });
+        }
+      }
+    }, 300);
+  };
+
   // Update container dimensions on mount and when view changes
   useEffect(() => {
     const updateDimensions = () => {
@@ -947,6 +963,7 @@ export default function PracticePage() {
                     },
                   }}
                   className="aspect-video w-full"
+                  onReady={handleYouTubeReady}
                 />
               </div>
             </div>

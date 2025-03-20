@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "LoopBop",
-  description: "Music Prompting Trainer",
+  description: "Music Gane",
 };
 
 export default function RootLayout({

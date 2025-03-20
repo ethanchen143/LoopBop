@@ -13,6 +13,7 @@ const categories = [
   { name: "Song", icon: Music },
   { name: "Artist", icon: User },
   { name: "Album", icon: Disc },
+  { name: "Genre", icon: Music },
 ];
 
 interface SelectedItem {
@@ -23,6 +24,7 @@ interface SelectedItem {
   youtube?: string; 
   pic?: string;
   description?: string;
+  family?: string;
 }
 
 export default function ExplorePage() {
@@ -353,6 +355,16 @@ export default function ExplorePage() {
                             {selectedItem.description || "No description available."}
                           </p>
                         </div>
+                      </div>
+                    )}
+                    {selectedCategory === "Genre" && (
+                      <div className="flex flex-col">
+                        <h3 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-cyan-400 mb-4">
+                          {selectedItem.family} Family
+                        </h3>
+                        <p className="text-white/80 leading-relaxed">
+                          {selectedItem.description || "No description available."}
+                        </p>
                       </div>
                     )}
                   </motion.div>

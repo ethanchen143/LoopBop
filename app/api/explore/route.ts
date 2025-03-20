@@ -69,7 +69,7 @@ export async function GET(request:NextRequest) {
           ORDER BY g.tag
           SKIP $skip
           LIMIT $limit
-          RETURN collect({ name: g.tag, pic: g.pic, description: COALESCE(g.description, "No description available.") }) AS results
+          RETURN collect({ name: g.tag, pic: g.pic, family: g.family, description: COALESCE(g.description, "No description available.") }) AS results
         `;
         break;
       default:
