@@ -51,6 +51,8 @@ interface NodeData {
   index?: number;
   disabled?: boolean; // Added for options selected by other players
   beingDragged?: boolean; // Track if node is being dragged
+  dragStartX?: number;
+  dragStartY?: number;
 }
 
 // Define specific types for D3 link data with our NodeData
@@ -108,11 +110,13 @@ const ForceFieldOptions: React.FC<ForceFieldProps> = ({
   const simulationRef = useRef<d3.Simulation<NodeDatum, LinkData> | null>(null);
   const [initialized, setInitialized] = useState(false);
   const tooltipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const dragStartTimeRef = useRef(0);
+  const draggedNodeRef = useRef<string | null>(null);
+  const movementThresholdRef = useRef(5);
   
-  // NEW: Add node positions memory to maintain positions between renders
   const nodePositionsRef = useRef(new Map());
   
-  // Map player IDs to colors
   const playerColorMap = useRef<Record<string, string>>({});
   
   // Assign colors to players on first render
@@ -186,24 +190,28 @@ const ForceFieldOptions: React.FC<ForceFieldProps> = ({
         const playerName = playerObj?.name || '';
         
         return {
-            id: i,
-            name: name,
-            description: description,
-            isSelected: isSelectedByCurrentUser,
-            selectedByCurrentUser: isSelectedByCurrentUser,
-            selectedByPlayerId: isSelectedByCurrentUser ? userId : undefined,
-            selectedByPlayerName: isSelectedByCurrentUser ? playerName : undefined,
-            playerColor: isSelectedByCurrentUser ? 
-                playerColorMap.current[userId] : undefined,
-            width,
-            height,
-            x, // Use preserved position
-            y, // Use preserved position
-            color: isSelectedByCurrentUser ? playerColorMap.current[userId] || POP_ART_COLORS[colorIndex] : POP_ART_COLORS[colorIndex],
-            color2: isSelectedByCurrentUser ? playerColorMap.current[userId] || POP_ART_COLORS_SECONDARY[colorIndex] : POP_ART_COLORS_SECONDARY[colorIndex],
-            index: i,
-            disabled: false, // No need to disable since we're filtering options
-            beingDragged: false
+          id: i,
+          name: name,
+          description: description,
+          isSelected: isSelectedByCurrentUser,
+          selectedByCurrentUser: isSelectedByCurrentUser,
+          selectedByPlayerId: isSelectedByCurrentUser ? userId : undefined,
+          selectedByPlayerName: isSelectedByCurrentUser ? playerName : undefined,
+          playerColor: isSelectedByCurrentUser ? 
+              playerColorMap.current[userId] : undefined,
+          width,
+          height,
+          x, // Use preserved position
+          y, // Use preserved position
+          color: isSelectedByCurrentUser ? 
+              "#00CC70" : 
+              POP_ART_COLORS[colorIndex],
+          color2: isSelectedByCurrentUser ? 
+              "#00FF8A" : 
+              POP_ART_COLORS_SECONDARY[colorIndex],
+          index: i,
+          disabled: false,
+          beingDragged: false
         };
     });
     
@@ -400,10 +408,10 @@ const ForceFieldOptions: React.FC<ForceFieldProps> = ({
         playerColor: isSelectedByCurrentUser ? 
           playerColorMap.current[userId] : undefined,
         color: isSelectedByCurrentUser ? 
-          playerColorMap.current[userId] || POP_ART_COLORS[i % POP_ART_COLORS.length] : 
+          "#00CC70" : 
           POP_ART_COLORS[i % POP_ART_COLORS.length],
         color2: isSelectedByCurrentUser ? 
-          playerColorMap.current[userId] || POP_ART_COLORS_SECONDARY[i % POP_ART_COLORS.length] : 
+          "#00FF8A" : 
           POP_ART_COLORS_SECONDARY[i % POP_ART_COLORS.length],
       };
     });
@@ -459,19 +467,31 @@ const ForceFieldOptions: React.FC<ForceFieldProps> = ({
       return; // Gradient doesn't exist yet, will be created in full simulation setup
     }
     
-    // Update existing gradient
     gradient.selectAll("stop").remove(); // Remove existing stops
     
-    // Add updated color stops
-    gradient.append("stop")
-      .attr("offset", "0%")
-      .attr("stop-color", nodeData.color2)
-      .attr("stop-opacity", 0.95);
-    
-    gradient.append("stop")
-      .attr("offset", "100%")
-      .attr("stop-color", nodeData.color)
-      .attr("stop-opacity", 0.85);
+    if (nodeData.selectedByCurrentUser) {
+      // Use pop art green gradient for selected nodes
+      gradient.append("stop")
+        .attr("offset", "0%")
+        .attr("stop-color", "#00FF8A") // Bright pop art green
+        .attr("stop-opacity", 0.95);
+      
+      gradient.append("stop")
+        .attr("offset", "100%")
+        .attr("stop-color", "#00CC70") // Slightly darker green
+        .attr("stop-opacity", 0.9);
+    } else {
+      // Regular gradient for unselected nodes
+      gradient.append("stop")
+        .attr("offset", "0%")
+        .attr("stop-color", nodeData.color2)
+        .attr("stop-opacity", 0.95);
+      
+      gradient.append("stop")
+        .attr("offset", "100%")
+        .attr("stop-color", nodeData.color)
+        .attr("stop-opacity", 0.85);
+    }
   };
 
   const showTooltipWithDelay = (event: MouseEvent, d: NodeDatum) => {
@@ -619,15 +639,29 @@ const ForceFieldOptions: React.FC<ForceFieldProps> = ({
         .attr("y2", "100%");
       
       // Add color stops
-      nodeGradient.append("stop")
-        .attr("offset", "0%")
-        .attr("stop-color", node.color2)
-        .attr("stop-opacity", 0.95);
-      
-      nodeGradient.append("stop")
-        .attr("offset", "100%")
-        .attr("stop-color", node.color)
-        .attr("stop-opacity", 0.85);
+      if (node.selectedByCurrentUser) {
+        // Green gradient for selected nodes
+        nodeGradient.append("stop")
+          .attr("offset", "0%")
+          .attr("stop-color", "#00FF8A") // Bright green
+          .attr("stop-opacity", 0.95);
+        
+        nodeGradient.append("stop")
+          .attr("offset", "100%")
+          .attr("stop-color", "#00CC70") // Darker green
+          .attr("stop-opacity", 0.9);
+      } else {
+        // Regular gradient for unselected nodes
+        nodeGradient.append("stop")
+          .attr("offset", "0%")
+          .attr("stop-color", node.color2)
+          .attr("stop-opacity", 0.95);
+        
+        nodeGradient.append("stop")
+          .attr("offset", "100%")
+          .attr("stop-color", node.color)
+          .attr("stop-opacity", 0.85);
+      }
       
       // Add a highlight element for the glossy effect
       const highlightGradient = defs.append("linearGradient")
@@ -697,8 +731,7 @@ const ForceFieldOptions: React.FC<ForceFieldProps> = ({
       .attr("class", "node-group")
       .attr("data-name", d => d.name);
 
-    // Add rounded rectangles for nodes
-    nodeElements
+      nodeElements
       .append("rect")
       .attr("class", "node-rect")
       .attr("width", d => d.width)
@@ -738,8 +771,8 @@ const ForceFieldOptions: React.FC<ForceFieldProps> = ({
           .transition()
           .duration(200)
           .attr("stroke", (d as NodeDatum).selectedByCurrentUser ? '#FFFFFF' : 
-                         (d as NodeDatum).isSelected ? (d as NodeDatum).playerColor || '#FFFFFF' : 
-                         'rgba(255, 255, 255, 0.3)')
+                 (d as NodeDatum).isSelected ? (d as NodeDatum).playerColor || '#FFFFFF' : 
+                 'rgba(255, 255, 255, 0.3)')
           .attr("stroke-width", (d as NodeDatum).isSelected ? 3 : 1.5);
           
         // Hide tooltip
@@ -749,10 +782,16 @@ const ForceFieldOptions: React.FC<ForceFieldProps> = ({
         // Skip clicks for disabled options or when the whole component is disabled
         if (d.disabled || disabled) return;
         
+        // Don't process click if this node was recently dragged
+        if (draggedNodeRef.current === d.name) {
+          return;
+        }
+        
         // Call onSelect regardless of if it's already selected
         onSelect((d as NodeDatum).name);
         event.stopPropagation();
       });
+
     
     // Add glossy highlight effect
     nodeElements
@@ -801,39 +840,59 @@ const ForceFieldOptions: React.FC<ForceFieldProps> = ({
     nodeElements
       .append("rect")
       .attr("class", "pulse-ring")
-      .attr("width", d => d.width + 10)
-      .attr("height", d => d.height + 10)
-      .attr("rx", 22) // Slightly larger than node
-      .attr("ry", 22)
-      .attr("x", d => -d.width / 2 - 5)
-      .attr("y", d => -d.height / 2 - 5)
+      .attr("width", d => d.width)
+      .attr("height", d => d.height)
+      .attr("rx", 20) 
+      .attr("ry", 20)
+      .attr("x", d => -d.width / 2)
+      .attr("y", d => -d.height / 2)
       .attr("fill", "none")
-      .attr("stroke", d => d.playerColor || "#FFFFFF")
-      .attr("stroke-width", 2)
-      .attr("stroke-opacity", 0.5)
+      .attr("stroke", d => d.selectedByCurrentUser ? "#FFFFFF" : (d.playerColor || "#FFFFFF"))
+      .attr("stroke-width", d => d.selectedByCurrentUser ? 3 : 2) // Thicker stroke for selected
+      .attr("stroke-opacity", d => d.selectedByCurrentUser ? 0.8 : 0.5) // Brighter for selected
       .attr("pointer-events", "none")
       .style("display", d => d.selectedByCurrentUser ? "block" : "none");
 
-    // Animation function for pulsating effect
-    function pulseAnimation() {
-      svg.selectAll("rect.pulse-ring")
-        .filter(function() { return d3.select(this).style("display") !== "none"; })
-        .transition()
-        .duration(1500)
-        .attr("width", d => (d as NodeDatum).width + 30)
-        .attr("height", d => (d as NodeDatum).height + 30)
-        .attr("x", d => -(d as NodeDatum).width / 2 - 15)
-        .attr("y", d => -(d as NodeDatum).height / 2 - 15)
-        .attr("stroke-opacity", 0)
-        .transition()
-        .duration(100)
-        .attr("width", d => (d as NodeDatum).width + 10)
-        .attr("height", d => (d as NodeDatum).height + 10)
-        .attr("x", d => -(d as NodeDatum).width / 2 - 5)
-        .attr("y", d => -(d as NodeDatum).height / 2 - 5)
-        .attr("stroke-opacity", 0.5)
-        .on("end", pulseAnimation);
-    }
+  // Animation function for pulsating effect - smooth continuous cycle
+  function pulseAnimation() {
+    // Track the current animation state (expand or contract)
+    const elements = svg.selectAll("rect.pulse-ring")
+      .filter(function() { return d3.select(this).style("display") !== "none"; });
+    
+    // Use a single smooth transition for pulsing
+    elements
+      .transition()
+      .duration(1500) // Consistent duration for expansion
+      .ease(d3.easeSinInOut) // Smooth sine wave easing
+      .attr("width", d => {
+        const increase = (d as NodeDatum).selectedByCurrentUser ? 30 : 15;
+        return (d as NodeDatum).width + increase;
+      })
+      .attr("height", d => {
+        const increase = (d as NodeDatum).selectedByCurrentUser ? 30 : 15;
+        return (d as NodeDatum).height + increase;
+      })
+      .attr("x", d => {
+        const offset = (d as NodeDatum).selectedByCurrentUser ? 15 : 7.5;
+        return -(d as NodeDatum).width / 2 - offset;
+      })
+      .attr("y", d => {
+        const offset = (d as NodeDatum).selectedByCurrentUser ? 15 : 7.5;
+        return -(d as NodeDatum).height / 2 - offset;
+      })
+      .attr("stroke-opacity", 0.1) // Don't go completely transparent
+      .attr("stroke-width", d => (d as NodeDatum).selectedByCurrentUser ? 4 : 2)
+      .transition() // Second transition for contracting
+      .duration(10) // Same duration for contraction
+      .ease(d3.easeSinInOut) // Smooth sine wave easing
+      .attr("width", d => (d as NodeDatum).width)
+      .attr("height", d => (d as NodeDatum).height)
+      .attr("x", d => -(d as NodeDatum).width / 2)
+      .attr("y", d => -(d as NodeDatum).height / 2)
+      .attr("stroke-opacity", d => (d as NodeDatum).selectedByCurrentUser ? 0.8 : 0.5)
+      .attr("stroke-width", d => (d as NodeDatum).selectedByCurrentUser ? 3 : 2)
+      .on("end", pulseAnimation); // Continue the cycle
+  }
 
     pulseAnimation();
 
@@ -1005,12 +1064,21 @@ const ForceFieldOptions: React.FC<ForceFieldProps> = ({
       });
     });
 
-    // UPDATED: Improved drag handling
     nodeElements.call(
       d3.drag<SVGGElement, NodeDatum>()
         .on("start", (event, d) => {
           // Only disable when component is fully disabled, not for selected nodes
           if (disabled) return; 
+          
+          // Reset the dragged node ref
+          draggedNodeRef.current = null;
+          
+          // Store start time for tracking short drags
+          dragStartTimeRef.current = Date.now();
+          
+          // Track the start position for detecting movement
+          d.dragStartX = event.x;
+          d.dragStartY = event.y;
           
           // When drag starts, let other players know this node is being manipulated
           d.beingDragged = true;
@@ -1030,6 +1098,15 @@ const ForceFieldOptions: React.FC<ForceFieldProps> = ({
         .on("drag", (event, d) => {
           // Only disable when component is fully disabled, not for selected nodes
           if (disabled) return;
+          
+          // Check if we've moved enough to consider this a drag
+          const movedX = Math.abs(event.x - (d.dragStartX || 0));
+          const movedY = Math.abs(event.y - (d.dragStartY || 0));
+          
+          if (movedX > movementThresholdRef.current || movedY > movementThresholdRef.current) {
+            // Mark this node as being dragged to prevent click selection
+            draggedNodeRef.current = d.name;
+          }
           
           // Update the fixed position
           d.fx = event.x;
@@ -1055,6 +1132,23 @@ const ForceFieldOptions: React.FC<ForceFieldProps> = ({
           
           // Final position save
           nodePositionsRef.current.set(d.name, { x: d.x, y: d.y });
+          
+          // If the drag was very short in time and movement, it's likely a click
+          // Clear the dragged node reference after a short delay to allow the click
+          // event to check it
+          const dragDuration = Date.now() - dragStartTimeRef.current;
+          
+          if (dragDuration < 200 && draggedNodeRef.current === d.name) {
+            // Short drag that didn't move much - clear quickly to allow click
+            setTimeout(() => {
+              draggedNodeRef.current = null;
+            }, 50);
+          } else {
+            // Longer drag or significant movement - keep flag for a bit longer
+            setTimeout(() => {
+              draggedNodeRef.current = null;
+            }, 300);
+          }
         })
     );
 

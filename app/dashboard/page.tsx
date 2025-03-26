@@ -3327,7 +3327,7 @@ export default function DashboardPage() {
                   </div>
                   
                   <button 
-                    className="bg-gradient-to-r from-green-600 to-blue-700 hover:from-green-700 hover:to-blue-800 text-white text-xl font-bold py-3 px-4 rounded-md shadow-lg shadow-green-700/30 flex items-center justify-center mt-3"
+                    className="bg-gradient-to-r from-pink-600 to-purple-800 text-white text-xl font-bold py-3 px-4 rounded-md shadow-lg shadow-green-700/30 flex items-center justify-center mt-3"
                     onClick={handleCreateGame}
                     disabled={isLoading}
                   >
@@ -3362,7 +3362,7 @@ export default function DashboardPage() {
                     <input
                       type="text"
                       value={joinCode}
-                      onChange={(e) => setJoinCode(e.target.value)}
+                      onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
                       placeholder="Enter 6-digit code"
                       className="w-full bg-gray-800 border border-purple-600 rounded-md px-4 py-3 text-white text-xl tracking-wider focus:outline-none focus:ring-2 focus:ring-purple-500"
                       maxLength={6}
@@ -3463,7 +3463,7 @@ export default function DashboardPage() {
                       <button 
                         className={`py-3 px-4 rounded-md text-xl font-bold ${
                           players.length >= 2
-                            ? "bg-gradient-to-r from-green-600 to-blue-700 hover:from-green-700 hover:to-blue-800 text-white shadow-lg shadow-green-700/30"
+                            ? "bg-gradient-to-r from-pink-600 to-purple-800 text-white shadow-lg shadow-green-700/30"
                             : "bg-gray-700 text-gray-400 cursor-not-allowed"
                         }`}
                         onClick={startBattleGame}

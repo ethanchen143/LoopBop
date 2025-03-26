@@ -184,9 +184,6 @@ declare global {
 // Client component that receives the unwrapped roomCode as a prop
 export default function BattleGameClient({ roomCode }: { roomCode: string }) {
   const router = useRouter();
-  
-  console.log("Battle page loaded for room:", roomCode);
-  
   // Component state
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -226,7 +223,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
     return Math.max(1, currentRound.correctAnswers?.length || 1);
   }, [currentRound, gameState?.players]);
 
-  // Update the handleOptionSelect function to check if the option is already selected by another player
+
   const handleOptionSelect = useCallback((option: string) => {
     if (!socketRef.current) {
       console.error('Socket not connected, cannot select option');
@@ -249,13 +246,17 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
     
     // Check if this genre is already selected by the current user
     const isSelected = selectedAnswers.includes(option);
-    console.log(`Genre ${option} is ${isSelected ? 'already selected' : 'not selected'}`);
+
+    if (isSelected) {
+      console.log(`Genre ${option} is already selected, cannot deselect`);
+      return;
+    }
     
     // Calculate max selections per player
     const maxSelectionsAllowed = optionsPerPlayer();
     
     // ALWAYS allow deselection, but limit selections to max allowed
-    if (!isSelected && selectedAnswers.length >= maxSelectionsAllowed) {
+    if (selectedAnswers.length >= maxSelectionsAllowed) {
       console.warn(`Cannot select more than ${maxSelectionsAllowed} genres`);
       return;
     }
@@ -264,9 +265,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
     setSelectionInProgress(true);
     
     // Create the updated selections array first BEFORE updating state
-    const updatedSelections = isSelected
-      ? selectedAnswers.filter(sel => sel !== option)
-      : [...selectedAnswers, option];
+    const updatedSelections = [...selectedAnswers, option];
     
     // Optimistically update UI with the same array we'll send to server
     setSelectedAnswers(updatedSelections);
@@ -646,15 +645,8 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
             
             // Small delay to let players see everyone is ready
             setTimeout(() => {
-              // Check if current user is the creator before emitting next-round
-              const isCreator = gameState?.players?.some(p => p.id === userIdValue && p.isCreator);
-              
-              if (isCreator) {
-                console.log('User is creator, emitting next-round');
-                socketRef.current?.emit('next-round');
-              } else {
-                console.log('User is not creator, waiting for host to advance');
-              }
+              console.log('User is creator, emitting next-round');
+              socketRef.current?.emit('next-round');
             }, 1500);
           }
         });
@@ -987,7 +979,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-black">
         <div className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-cyan-400 to-pink-500 text-3xl font-bold animate-pulse p-4">
-          Loading Battle Game...
+          Loading Game...
         </div>
       </div>
     );
@@ -1015,7 +1007,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
       <div className="flex items-center justify-center min-h-screen bg-black">
         <div className="bg-gradient-to-r from-black to-indigo-900 p-8 rounded-lg border-4 border-pink-500 shadow-lg shadow-pink-500/30">
           <p className="text-pink-500 text-2xl font-bold mb-4">Game Not Found</p>
-          <p className="text-white">The battle game could not be found or has ended.</p>
+          <p className="text-white">The game could not be found or has ended.</p>
           <Button 
             className="mt-6 bg-pink-500 hover:bg-pink-600 text-black font-bold"
             onClick={returnToDashboard}
@@ -1044,7 +1036,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
                   <Home className="h-6 w-6 text-cyan-400" />
                 </Button>
                 <CardTitle className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">
-                  Battle Waiting Room
+                  Waiting Room
                 </CardTitle>
                 <div className="w-12"></div> {/* Spacer for alignment */}
               </div>
@@ -1370,14 +1362,15 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
                     {/* Ready button for all players */}
                     <Button 
                       className={`${currentPlayerReady 
-                        ? 'bg-green-600 hover:bg-green-700' 
-                        : 'bg-gradient-to-r from-blue-500 to-green-600 hover:from-blue-600 hover:to-green-700'} 
+                        ? 'bg-green-600' 
+                        : 'bg-green-600 hover:bg-green-700'} 
                         text-white text-xl font-bold py-3 px-8`}
                       onClick={handleReadyToggle}
+                      disabled={currentPlayerReady}
                     >
                       {currentPlayerReady 
-                        ? 'Ready!' 
-                        : 'Click When Ready'}
+                        ? 'Ready' 
+                        : 'Ready'}
                     </Button>
                   </>
                 )}
@@ -1549,8 +1542,8 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
                   <p className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">
                     {isMyTurn() 
                       ? hasCompletedSelections()
-                        ? "Waiting for others to select genres..."
-                        : "Your turn! Select genres for this song" 
+                        ? "Done! Waiting for others to select genres..."
+                        : "Game start! Select genres for this song" 
                       : roundComplete 
                         ? "All selections complete!" 
                         : "Waiting for players to make selections..."}

@@ -455,20 +455,35 @@ export default async function SocketHandler(
         const currentPlayerSelections = currentRound.playerSelections.get(encodedUserId) || [];
         
         // Toggle selection
+        // Never allow deselection - only add new selections
         let updatedSelections: string[];
-        if (currentPlayerSelections.includes(option)) {
-          // Remove selection if already selected
-          updatedSelections = currentPlayerSelections.filter(s => s !== option);
-        } else {
-          // Add selection
-          updatedSelections = [...currentPlayerSelections, option];
-          
-          // Check if player has reached max selections
-          const maxSelections = currentRound.correctAnswers.length;
-          if (updatedSelections.length > maxSelections) {
-            socket.emit('error', { message: `Maximum selections reached (${maxSelections})` });
-            return;
+
+        // Check if this option is already selected by another player
+        const isSelectedByOtherPlayer = Array.from(currentRound.playerSelections?.entries() || []).some(
+          ([encodedKey, selections]) => {
+            const decodedKey = decodeEmail(encodedKey);
+            return decodedKey !== userId && Array.isArray(selections) && selections.includes(option);
           }
+        );
+
+        if (isSelectedByOtherPlayer) {
+          socket.emit('error', { message: `Genre "${option}" already selected by another player` });
+          return;
+        }
+
+        // If already selected by current player, don't do anything (no toggling)
+        if (currentPlayerSelections.includes(option)) {
+          return;
+        }
+
+        // Add selection
+        updatedSelections = [...currentPlayerSelections, option];
+
+        // Check if player has reached max selections
+        const maxSelections = currentRound.correctAnswers.length;
+        if (updatedSelections.length > maxSelections) {
+          socket.emit('error', { message: `Maximum selections reached (${maxSelections})` });
+          return;
         }
         
         // Set with encoded key
@@ -605,12 +620,12 @@ export default async function SocketHandler(
         
         console.log(`All players ready: ${allPlayersReady}`);
         
-        // If all players are ready, auto-advance to next round
-        if (allPlayersReady && room.creatorId === userId) {
-          console.log('All players ready, auto-advancing to next round...');
-          // Use socket.emit instead of direct function call to ensure everything goes through the socket flow
-          handleNextRound(socket);
-        }
+        // // If all players are ready, auto-advance to next round
+        // if (allPlayersReady && room.creatorId === userId) {
+        //   console.log('All players ready, auto-advancing to next round...');
+        //   // Use socket.emit instead of direct function call to ensure everything goes through the socket flow
+        //   handleNextRound(socket);
+        // }
         
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -848,12 +863,6 @@ export default async function SocketHandler(
         const room = await BattleRoom.findOne({ code: roomCode }) as (Document & IBattleRoom) | null;
         if (!room) {
           socket.emit('error', { message: 'Room not found' });
-          return;
-        }
-        
-        // Only creator can advance to next round
-        if (room.creatorId !== userId) {
-          socket.emit('error', { message: 'Only creator can advance round' });
           return;
         }
         
