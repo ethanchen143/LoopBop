@@ -1,4 +1,4 @@
-import { Server as SocketIOServer } from 'socket.io';
+import { Server as SocketIOServer, Socket as ServerSocket} from 'socket.io';
 import { Server as HTTPServer } from 'http';
 import { NextApiRequest } from 'next';
 import { NextApiResponse } from 'next';
@@ -26,6 +26,7 @@ interface ServerToClientEvents {
   'new-round': (data: NewRoundData) => void;
   'game-started': (data: GameStartedData) => void;
   'game-over': (data: { players: PlayerData[] }) => void;
+  'players-ready-status': (data: { playersReady: Record<string, boolean> }) => void;
   'error': (data: { message: string }) => void;
 }
 
@@ -36,6 +37,7 @@ interface ClientToServerEvents {
   'evaluate-round': () => void;
   'next-round': () => void;
   'start-game': () => void;
+  'player-ready': (data: { isReady: boolean }) => void;
 }
 
 // Define types for event data
@@ -64,6 +66,7 @@ interface RoomData {
   currentRound: number;
   creatorId: string;
   rounds: RoundData[];
+  playersReady?: Record<string, boolean>;
 }
 
 interface RoundData {
@@ -320,8 +323,16 @@ export default async function SocketHandler(
           songCount: room.songCount,
           status: room.status,
           currentRound: room.currentRound,
-          creatorId: room.creatorId, // Ensure creatorId is always included
-          rounds: room.rounds || []
+          creatorId: room.creatorId,
+          rounds: room.rounds || [],
+          // Add playersReady to the response - convert Map to Record
+          playersReady: room.playersReady 
+            ? Array.from(room.playersReady).reduce((obj, [encodedKey, value]) => {
+                const originalKey = decodeEmail(encodedKey);
+                obj[originalKey] = value;
+                return obj;
+              }, {} as Record<string, boolean>) 
+            : {}
         };
         
         // Send room data to the joining client
@@ -357,7 +368,8 @@ export default async function SocketHandler(
             name: userId.split('@')[0],
             isCreator: true,
             score: 0
-          }]
+          }],
+          playersReady: new Map([[encodeEmail(userId), false]])
         });
         
         await room.save();
@@ -392,6 +404,7 @@ export default async function SocketHandler(
           currentRound: room.currentRound,
           creatorId: room.creatorId,
           rounds: room.rounds || []
+          
         });
         
         console.log('Room created:', roomCode);
@@ -529,6 +542,80 @@ export default async function SocketHandler(
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         console.error('Error selecting genre:', error);
         socket.emit('error', { message: 'Failed to select genre: ' + errorMessage });
+      }
+    });
+
+
+
+
+    socket.on('player-ready', async (data: { isReady: boolean }) => {
+      try {
+        const { roomCode, userId } = socket.data;
+        
+        if (!roomCode || !userId) {
+          socket.emit('error', { message: 'Not in a room' });
+          return;
+        }
+        
+        console.log(`Player ${userId} ready status changed to: ${data.isReady} in room ${roomCode}`);
+        
+        await connectToDatabase();
+        
+        const room = await BattleRoom.findOne({ code: roomCode }) as (Document & IBattleRoom) | null;
+        if (!room) {
+          socket.emit('error', { message: 'Room not found' });
+          return;
+        }
+        
+        // Initialize playersReady if not exists
+        if (!room.playersReady) {
+          room.playersReady = new Map<string, boolean>();
+        }
+        
+        // Encode email to avoid issues with dots in Map keys
+        const encodedUserId = encodeEmail(userId);
+        
+        // Update ready status
+        room.playersReady.set(encodedUserId, data.isReady);
+        
+        // Mark as modified for Mongoose
+        room.markModified('playersReady');
+        await room.save();
+        
+        // Create object from Map for emitting to clients
+        const playersReadyObject: Record<string, boolean> = {};
+        
+        if (room.playersReady) {
+          for (const [encodedKey, value] of room.playersReady.entries()) {
+            const originalKey = decodeEmail(encodedKey);
+            playersReadyObject[originalKey] = value;
+          }
+        }
+        
+        // Notify all clients about ready status change
+        io.to(roomCode).emit('players-ready-status', { 
+          playersReady: playersReadyObject 
+        });
+        
+        // Check if all players are ready - safely handle undefined
+        const allPlayersReady = room.players.every(player => {
+          const encodedPlayerId = encodeEmail(player.userId);
+          return room.playersReady?.get(encodedPlayerId) === true;
+        });
+        
+        console.log(`All players ready: ${allPlayersReady}`);
+        
+        // If all players are ready, auto-advance to next round
+        if (allPlayersReady && room.creatorId === userId) {
+          console.log('All players ready, auto-advancing to next round...');
+          // Use socket.emit instead of direct function call to ensure everything goes through the socket flow
+          handleNextRound(socket);
+        }
+        
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error('Error updating player ready status:', error);
+        socket.emit('error', { message: 'Failed to update ready status: ' + errorMessage });
       }
     });
     
@@ -745,9 +832,8 @@ export default async function SocketHandler(
         socket.emit('error', { message: 'Failed to evaluate round: ' + errorMessage });
       }
     });
-    
-    // Next round handler
-    socket.on('next-round', async () => {
+
+    const handleNextRound = async (socket: ServerSocket) => {
       try {
         const { roomCode } = socket.data;
         const userId = socket.data.userId;
@@ -792,6 +878,15 @@ export default async function SocketHandler(
         room.currentRound += 1;
         room.status = 'round_in_progress';
         
+        // Reset player ready statuses for the new round
+        if (room.playersReady) {
+          room.players.forEach(player => {
+            const encodedPlayerId = encodeEmail(player.userId);
+            room.playersReady!.set(encodedPlayerId, false);
+          });
+          room.markModified('playersReady');
+        }
+        
         // Fetch new battle data for this round
         const battleData = await fetchBattleData(room.players.length);
         
@@ -827,6 +922,11 @@ export default async function SocketHandler(
         console.error('Error starting next round:', error);
         socket.emit('error', { message: 'Failed to start next round: ' + errorMessage });
       }
+    };
+    
+    // Next round handler
+    socket.on('next-round', async () => {
+      await handleNextRound(socket);
     });
     
     // Start game (first round)
@@ -863,6 +963,19 @@ export default async function SocketHandler(
         // Set up first round
         room.status = 'round_in_progress';
         room.currentRound = 0;
+
+        // Initialize or reset playersReady for the start of the game
+        if (!room.playersReady) {
+          room.playersReady = new Map<string, boolean>();
+        }
+        
+        // Set all players to not ready for the first round
+        room.players.forEach(player => {
+          const encodedPlayerId = encodeEmail(player.userId);
+          room.playersReady!.set(encodedPlayerId, false);
+        });
+        
+        room.markModified('playersReady');
         
         // Fetch battle data from our new endpoint
         const battleData = await fetchBattleData(room.players.length);

@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useLayoutEffect, useCallback } from "react
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Music, Trophy, Home, Users, Clock, Crown, ArrowLeft } from 'lucide-react';
+import { Music, Trophy, Home, Users, Crown, ArrowLeft, CheckCircle, Circle } from 'lucide-react';
 import YouTube from "react-youtube";
 import ThreeJSBackground from "@/components/ThreeShape";
 import ForceFieldOptions from "@/components/ForceFieldMulti";
@@ -28,6 +28,7 @@ interface Player {
   isCreator: boolean;
   score: number;
   color?: string;
+  isReady?: boolean; // Add isReady property to track ready status
 }
 
 interface GenreMatchDetails{
@@ -59,6 +60,7 @@ interface GameState {
   players: Player[];
   currentRound: number;
   rounds: Round[];
+  playersReady?: Record<string, boolean>; // Add playersReady to track who's ready
 }
 
 // Digital number component for arcade scoreboard
@@ -74,7 +76,7 @@ const DigitalNumber = ({ value, className = "" }: { value: number; className?: s
     6: ['a', 'f', 'g', 'c', 'd', 'e'],
     7: ['a', 'b', 'c'],
     8: ['a', 'b', 'c', 'd', 'e', 'f', 'g'],
-    9: ['a', 'b', 'c', 'd', 'f', 'g']
+    9: ['a', 'f', 'g', 'b', 'c', 'd']
   };
 
   const activeSegments = segments[value as keyof typeof segments] || [];
@@ -199,9 +201,11 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
   const [selectionInProgress, setSelectionInProgress] = useState(false);
   const [roundComplete, setRoundComplete] = useState(false);
   const [nextRoundClicked, setNextRoundClicked] = useState(false);
-
+  const [currentPlayerReady, setCurrentPlayerReady] = useState(false); // Track current player's ready status
+  
   // just to satisfy eslint
   console.log(showRoundResults);
+  console.log(nextRoundClicked);
   
   // Refs
   const forceFieldContainerRef = useRef<HTMLDivElement>(null);
@@ -311,6 +315,17 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
       return playerSelections.length >= requiredSelections;
     });
   }, [currentRound, gameState?.players, optionsPerPlayer]);
+  
+  // Function to check if all players are ready to proceed to next round
+  const areAllPlayersReady = useCallback(() => {
+    if (!gameState?.players || !gameState?.playersReady) return false;
+    
+    // Get all player IDs 
+    const realPlayerIds = gameState.players.map(p => p.id);
+    
+    // Check if all players are ready
+    return realPlayerIds.every(playerId => gameState.playersReady?.[playerId] === true);
+  }, [gameState?.players, gameState?.playersReady]);
   
   // Get the current player
   const currentPlayer = gameState?.players?.find(p => p.id === userId);
@@ -452,6 +467,9 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
               console.log('This is the final round - showing final results');
               setShowFinalResults(true);
             }
+            
+            // Reset ready status when joining a room in evaluating state
+            setCurrentPlayerReady(data.playersReady?.[userIdValue] === true);
           } else if (data.status === 'round_in_progress') {
             console.log('Setting view to playing - room is in round_in_progress state');
             setCurrentView('playing');
@@ -562,46 +580,84 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
           setLoading(true);
           console.log('New round event received:', data);
             
-            setGameState(prev => {
-              if (!prev) return prev;
-              
-              const updatedRounds = [...(prev.rounds || [])];
-              
-              // Add or update the round
-              if (updatedRounds.length <= data.currentRound) {
-                updatedRounds.push(data.round);
-              } else {
-                updatedRounds[data.currentRound] = data.round;
-              }
-              
-              return {
-                ...prev,
-                status: data.status,
-                currentRound: data.currentRound,
-                rounds: updatedRounds
-              };
-            });
+          setGameState(prev => {
+            if (!prev) return prev;
             
-            // Reset round-specific state
-            setRoundComplete(false);
-            setSelectedAnswers([]);
-            setShowRoundResults(false);
-            setSelectionInProgress(false);
+            const updatedRounds = [...(prev.rounds || [])];
             
-            // Use setTimeout to ensure state updates are processed before view change
+            // Add or update the round
+            if (updatedRounds.length <= data.currentRound) {
+              updatedRounds.push(data.round);
+            } else {
+              updatedRounds[data.currentRound] = data.round;
+            }
+            
+            return {
+              ...prev,
+              status: data.status,
+              currentRound: data.currentRound,
+              rounds: updatedRounds,
+              playersReady: {} // Reset players ready status for new round
+            };
+          });
+          
+          // Reset round-specific state
+          setRoundComplete(false);
+          setSelectedAnswers([]);
+          setShowRoundResults(false);
+          setSelectionInProgress(false);
+          setCurrentPlayerReady(false); // Reset ready status for new round
+          
+          // Use setTimeout to ensure state updates are processed before view change
+          setTimeout(() => {
+            setCurrentView('playing');
+            
+            // Update video ID
+            if (data.round && data.round.songId) {
+              setVideoId(getStandardYouTubeId(data.round.songId));
+            }
             setTimeout(() => {
-              setCurrentView('playing');
-              
-              // Update video ID
-              if (data.round && data.round.songId) {
-                setVideoId(getStandardYouTubeId(data.round.songId));
-              }
-              setTimeout(() => {
-                setLoading(false);
-              }, 200);
-            }, 100);
+              setLoading(false);
+            }, 200);
+          }, 100);
+        });
+        
+        // Handle player ready status updates
+        socket.on('players-ready-status', (data) => {
+          console.log('Players ready status received:', data);
+          
+          // Update game state with new ready status
+          setGameState(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              playersReady: data.playersReady
+            };
+          });
+          
+          // Also update current player's ready status
+          if (data.playersReady && userIdValue in data.playersReady) {
+            setCurrentPlayerReady(data.playersReady[userIdValue]);
           }
-        );
+          
+          // If all players are ready and we have an auto-advance, trigger it
+          if (Object.values(data.playersReady || {}).every(ready => ready === true)) {
+            console.log('All players are ready, auto-advancing to next round shortly...');
+            
+            // Small delay to let players see everyone is ready
+            setTimeout(() => {
+              // Check if current user is the creator before emitting next-round
+              const isCreator = gameState?.players?.some(p => p.id === userIdValue && p.isCreator);
+              
+              if (isCreator) {
+                console.log('User is creator, emitting next-round');
+                socketRef.current?.emit('next-round');
+              } else {
+                console.log('User is not creator, waiting for host to advance');
+              }
+            }, 1500);
+          }
+        });
         
         socket.on('selections-updated', (data) => {
           console.log('Selections updated event received:', data);
@@ -702,9 +758,13 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
               status: 'evaluating',
               creatorId: data.creatorId,
               players: data.players || prev.players,
-              rounds: updatedRounds
+              rounds: updatedRounds,
+              playersReady: {} // Initialize empty ready status when round is evaluated
             };
           });
+          
+          // Reset ready status when round is evaluated
+          setCurrentPlayerReady(false);
           
           setShowRoundResults(true);
           setCurrentView('results');
@@ -840,28 +900,26 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
     setRoundComplete(false);
   };
   
-  // Improved next round handler
-  const handleNextRound = () => {
-    if (!socketRef.current || !isUserHost()) {
-      console.warn('Cannot advance to next round: socket not connected or user is not creator');
+  // Handle player ready status
+  const handleReadyToggle = () => {
+    if (!socketRef.current || !userId) {
+      console.warn('Cannot set ready status: socket not connected or user ID not available');
       return;
     }
     
-    console.log('Advancing to next round');
+    // Toggle ready status
+    const newReadyStatus = !currentPlayerReady;
+    console.log(`Setting ready status to: ${newReadyStatus}`);
     
-    setNextRoundClicked(true);
+    // Update local state immediately for responsive UI
+    setCurrentPlayerReady(newReadyStatus);
     
-    // Add a safety timeout to reset the button state if server doesn't respond
-    const resetTimeout = setTimeout(() => {
-      setNextRoundClicked(false);
-    }, 3000);
-    
-    // Store timeout ID to clear it when we get server response
-    window.nextRoundTimeout = resetTimeout as unknown as number;
-    
-    socketRef.current.emit('next-round');
+    // Emit to server
+    socketRef.current.emit('player-ready', {
+      isReady: newReadyStatus
+    });
   };
-  
+    
   // Handle starting the game (creator only)
   const handleStartGame = () => {
     if (!socketRef.current || !currentPlayer?.isCreator) return;
@@ -882,52 +940,47 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
            !isRoundComplete();
   }, [gameState?.status, currentRound?.status, isRoundComplete]);
 
-  // Check if current user is the host
-  const isUserHost = useCallback(() => {
-    if (!gameState || !userId) {
-        console.log('isUserHost: Missing gameState or userId');
-        return false;
-    }
-    const isHost = gameState.creatorId === userId || 
-                   gameState.players?.some(p => p.id === userId && p.isCreator) || false;
-    console.log(`isUserHost check: creatorId=${gameState.creatorId}, userId=${userId}, isHost=${isHost}`);
-    return isHost;
- }, [gameState, userId]); 
+  // Calculate ready players count
+  const getReadyPlayersCount = useCallback(() => {
+    if (!gameState?.playersReady || !gameState?.players) return 0;
+    
+    return Object.values(gameState.playersReady).filter(ready => ready === true).length;
+  }, [gameState?.playersReady, gameState?.players]);
 
-// Update your function signature to properly accept an array of options
-const formatOptionsForForceField = useCallback((
-  options: Genre[] | QuestionOption[] | string[] | unknown[]
-): QuestionOption[] => {
-  if (!options || !Array.isArray(options)) {
-    console.error('Invalid options data received:', options);
-    return [];
-  }
-
-  return options.map(option => {
-    if (typeof option === 'object' && option !== null && 'name' in option) {
-      // It's either a Genre or QuestionOption object
-      return {
-        name: (option as { name: string }).name,
-        description: 'description' in option ? 
-          (option as { description: string }).description : 
-          `${(option as { name: string }).name} music genre`
-      };
-    } 
-    else if (typeof option === 'string') {
-      return {
-        name: option,
-        description: `${option} music genre`
-      };
-    } 
-    else {
-      console.warn('Invalid option format:', option);
-      return {
-        name: String(option),
-        description: 'Music genre'
-      };
+  // Format options for force field
+  const formatOptionsForForceField = useCallback((
+    options: Genre[] | QuestionOption[] | string[] | unknown[]
+  ): QuestionOption[] => {
+    if (!options || !Array.isArray(options)) {
+      console.error('Invalid options data received:', options);
+      return [];
     }
-  });
-}, []);
+
+    return options.map(option => {
+      if (typeof option === 'object' && option !== null && 'name' in option) {
+        // It's either a Genre or QuestionOption object
+        return {
+          name: (option as { name: string }).name,
+          description: 'description' in option ? 
+            (option as { description: string }).description : 
+            `${(option as { name: string }).name} music genre`
+        };
+      } 
+      else if (typeof option === 'string') {
+        return {
+          name: option,
+          description: `${option} music genre`
+        };
+      } 
+      else {
+        console.warn('Invalid option format:', option);
+        return {
+          name: String(option),
+          description: 'Music genre'
+        };
+      }
+    });
+  }, []);
 
 
   if (loading) {
@@ -1126,6 +1179,16 @@ const formatOptionsForForceField = useCallback((
                                 Host
                               </span>
                             )}
+                            {/* Ready status indicator */}
+                            {!showFinalResults && (
+                              <span className="ml-2 flex items-center">
+                                {gameState.playersReady?.[player.id] ? (
+                                  <CheckCircle className="h-5 w-5 text-green-400" />
+                                ) : (
+                                  <Circle className="h-5 w-5 text-gray-400" />
+                                )}
+                              </span>
+                            )}
                           </div>
                           
                           <div className="flex items-center space-x-4">
@@ -1276,46 +1339,56 @@ const formatOptionsForForceField = useCallback((
                 </div>
               )}
               
+              {/* Ready status indicator for non-final results */}
+              {!showFinalResults && (
+                <div className="flex justify-between items-center mb-4">
+                  <div className="text-gray-300">
+                    <span className="font-semibold">{getReadyPlayersCount()}</span> of <span className="font-semibold">{gameState.players?.length || 0}</span> players ready
+                  </div>
+                  
+                  {/* Progress bar for ready players */}
+                  <div className="w-1/2 bg-gray-800 h-2 rounded-full overflow-hidden">
+                    <div 
+                      className="bg-gradient-to-r from-green-500 to-green-600 h-full transition-all duration-300 ease-out" 
+                      style={{ width: `${(getReadyPlayersCount() / (gameState.players?.length || 1)) * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+              )}
+              
               {/* Navigation buttons */}
               <div className="flex justify-center">
                 {showFinalResults ? (
-                    <Button 
+                  <Button 
                     className="bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white text-xl font-bold py-3 px-8"
                     onClick={returnToDashboard}
-                    >
+                  >
                     Return to Dashboard
-                    </Button>
+                  </Button>
                 ) : (
-                    <>
-                      {isUserHost() ? (
-                        <Button 
-                          className={`bg-gradient-to-r from-green-500 to-blue-600 hover:from-green-600 hover:to-blue-700 text-white text-xl font-bold py-3 px-8 ${
-                            nextRoundClicked ? 'opacity-70 cursor-not-allowed' : ''
-                          }`}
-                          onClick={handleNextRound}
-                          disabled={nextRoundClicked}
-                        >
-                          {nextRoundClicked ? (
-                            <span className="flex items-center">
-                              <span className="mr-2 animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent"></span>
-                              Loading...
-                            </span>
-                          ) : (
-                            (gameState.currentRound || 0) < (gameState.songCount || 0) - 1 ? "Next Round" : "See Final Results"
-                          )}
-                        </Button>
-                      ) : (
-                        // Non-host view remains the same
-                        <div className="bg-indigo-900/50 p-4 rounded-lg text-center">
-                          <div className="animate-pulse mb-2">
-                            <Clock className="h-6 w-6 text-cyan-400 mx-auto" />
-                          </div>
-                          <p className="text-lg text-gray-300">Waiting for the host to continue...</p>
-                        </div>
-                      )}
-                    </>
+                  <>
+                    {/* Ready button for all players */}
+                    <Button 
+                      className={`${currentPlayerReady 
+                        ? 'bg-green-600 hover:bg-green-700' 
+                        : 'bg-gradient-to-r from-blue-500 to-green-600 hover:from-blue-600 hover:to-green-700'} 
+                        text-white text-xl font-bold py-3 px-8`}
+                      onClick={handleReadyToggle}
+                    >
+                      {currentPlayerReady 
+                        ? 'Ready!' 
+                        : 'Click When Ready'}
+                    </Button>
+                  </>
                 )}
               </div>
+              
+              {/* Ready players info */}
+              {!showFinalResults && areAllPlayersReady() && (
+                <div className="mt-4 text-center text-green-400 animate-pulse">
+                  All players ready! Starting next round...
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -1323,7 +1396,7 @@ const formatOptionsForForceField = useCallback((
     );
   }
   
-  // Game play view - REDESIGNED
+  // Game play view - unchanged
   if (currentView === "playing") {
     // Calculate required selections
     const maxSelectionsAllowed = optionsPerPlayer();

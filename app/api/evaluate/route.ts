@@ -1,7 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import { getSession } from "@/lib/neo4j";
 
-// Define interfaces for our data structures
 interface GenreMatchScore {
   genre: string;
   score: number;

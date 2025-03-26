@@ -49,6 +49,7 @@ export interface IBattleRoom extends Document {
   players: IPlayer[];
   rounds: IRound[];
   createdAt: Date;
+  playersReady?: Map<string, boolean>;
 }
 
 // Schema definitions
@@ -97,7 +98,8 @@ const battleRoomSchema = new mongoose.Schema({
   currentRound: { type: Number, default: 0 },
   players: [playerSchema],
   rounds: [roundSchema],
-  createdAt: { type: Date, default: Date.now, expires: '24h' } // Auto-delete after 24 hours
+  createdAt: { type: Date, default: Date.now, expires: '24h' },
+  playersReady: { type: Map, of: Boolean, default: () => new Map() }
 });
 
 // Check if the model is already defined to prevent OverwriteModelError
