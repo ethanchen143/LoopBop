@@ -456,7 +456,7 @@ export default async function SocketHandler(
         
         // Toggle selection
         // Never allow deselection - only add new selections
-        let updatedSelections: string[];
+        
 
         // Check if this option is already selected by another player
         const isSelectedByOtherPlayer = Array.from(currentRound.playerSelections?.entries() || []).some(
@@ -475,9 +475,9 @@ export default async function SocketHandler(
         if (currentPlayerSelections.includes(option)) {
           return;
         }
-
+        
         // Add selection
-        updatedSelections = [...currentPlayerSelections, option];
+        const updatedSelections = [...currentPlayerSelections, option];
 
         // Check if player has reached max selections
         const maxSelections = currentRound.correctAnswers.length;
