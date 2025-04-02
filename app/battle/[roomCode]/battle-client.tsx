@@ -788,8 +788,29 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
         // Error handler
         socket.on('error', (data) => {
           console.error('Error event received:', data);
+          
+          // Clear any pending timeout
+          if (window.lastResetTimeout) {
+            clearTimeout(window.lastResetTimeout);
+            window.lastResetTimeout = undefined;
+          }
+          
+          // Always reset selection in progress state when receiving an error
+          setSelectionInProgress(false);
+          
+          // Show error message
           if (data.message) {
-            setError(data.message);
+            // Check if this is a selection-related error
+            if (data.message.includes('already selected by another player')) {
+              // Visual feedback could be added here
+              console.warn('Selection rejected:', data.message);
+              
+              // No need to update the error state for selection conflicts
+              // as it would interrupt the game flow
+            } else {
+              // For other errors, show the error message
+              setError(data.message);
+            }
           }
         });
         
