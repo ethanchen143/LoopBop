@@ -205,6 +205,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
   // just to satisfy eslint
   console.log(showRoundResults);
   console.log(nextRoundClicked);
+  setShowSelectionFlash(false);
   
   // Refs
   const forceFieldContainerRef = useRef<HTMLDivElement>(null);
