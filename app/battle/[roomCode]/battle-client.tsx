@@ -199,6 +199,8 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
   const [roundComplete, setRoundComplete] = useState(false);
   const [nextRoundClicked, setNextRoundClicked] = useState(false);
   const [currentPlayerReady, setCurrentPlayerReady] = useState(false); // Track current player's ready status
+
+  const [showSelectionFlash, setShowSelectionFlash] = useState(false);
   
   // just to satisfy eslint
   console.log(showRoundResults);
@@ -229,65 +231,64 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
       console.error('Socket not connected, cannot select option');
       return;
     }
-    
+
     if (selectionInProgress) {
       console.log('Selection already in progress, please wait');
       return;
     }
-    
-    console.log('Selecting genre:', option);
-    
-    // Find the current round
+
+    console.log('Attempting to select genre:', option);
+
     const currentRound = gameState?.rounds?.[gameState.currentRound || 0];
     if (!currentRound) {
       console.error('No current round found');
       return;
     }
-    
-    // Check if this genre is already selected by the current user
-    const isSelected = selectedAnswers.includes(option);
 
+    // Still useful to check locally if already selected to avoid unnecessary emits
+    // Note: This uses the server-confirmed state now
+    const isSelected = selectedAnswers.includes(option);
     if (isSelected) {
-      console.log(`Genre ${option} is already selected, cannot deselect`);
-      return;
+      console.log(`Genre ${option} is already selected by you (confirmed), cannot re-select`);
+      return; // Don't emit if already successfully selected
     }
-    
-    // Calculate max selections per player
+
     const maxSelectionsAllowed = optionsPerPlayer();
-    
-    // ALWAYS allow deselection, but limit selections to max allowed
     if (selectedAnswers.length >= maxSelectionsAllowed) {
       console.warn(`Cannot select more than ${maxSelectionsAllowed} genres`);
       return;
     }
-    
-    // Set selection in progress to prevent multiple rapid clicks
+
+    // Prevent further clicks until server responds
     setSelectionInProgress(true);
-    
-    // Create the updated selections array first BEFORE updating state
-    const updatedSelections = [...selectedAnswers, option];
-    
-    // Optimistically update UI with the same array we'll send to server
-    setSelectedAnswers(updatedSelections);
-    
-    // Emit the selection with a slight delay to prevent network hammering
+
+    // Emit the selection attempt
     setTimeout(() => {
-      socketRef.current?.emit('select-genre', { 
-        option,
-        action: isSelected ? 'deselect' : 'select',
-        selections: updatedSelections  // Use the pre-calculated array
-      });
-      
+      // Make sure socket is still connected before emitting
+      if (socketRef.current) {
+        socketRef.current.emit('select-genre', { option }); // Simplified emit, just send the option
+      } else {
+         console.error('Socket disconnected before selection could be sent');
+         setSelectionInProgress(false); // Reset if socket disconnected
+         return;
+      }
+
       // Add a longer timeout to reset selection state if server doesn't respond
       const resetTimeout = setTimeout(() => {
-        console.log('Force resetting selection in progress state');
-        setSelectionInProgress(false);
-      }, 2000);
-      
-      // Store the timeout so we can clear it if server responds
+        console.log('Force resetting selection in progress state (timeout)');
+        // Check if it's still in progress before resetting,
+        // it might have completed successfully just before the timeout fired
+        if (selectionInProgress) {
+          setSelectionInProgress(false);
+        }
+      }, 3000); // 3 second timeout
+
+      // Store the timeout ID on the window object (consider a ref if preferred)
       window.lastResetTimeout = resetTimeout as unknown as number;
-    }, 100);
-  }, [socketRef, selectionInProgress, gameState, selectedAnswers, optionsPerPlayer]);
+    }, 100); // Keep slight delay
+
+  }, [socketRef, selectionInProgress, gameState, selectedAnswers, optionsPerPlayer, userId]); // Added userId dependency
+
 
   // Function to check if the current player has already made all selections
   const hasCompletedSelections = useCallback(() => {
@@ -1414,7 +1415,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
     const maxSelectionsAllowed = optionsPerPlayer();
     
     return (
-      <div className="relative min-h-screen bg-black text-white overflow-hidden">
+      <div className={`relative min-h-screen bg-black text-white overflow-hidden ${showSelectionFlash ? 'animate-selection-flash' : ''}`}>
         <ThreeJSBackground />
         
         {/* Top header with back button */}
@@ -1585,7 +1586,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
             >
               {currentRound && containerDimensions.width > 10 && (
                 <ForceFieldOptions
-                key={`forcefield-${roomCode}-${gameState.currentRound || 0}`}
+                key={`forcefield-${roomCode}-${gameState.currentRound || 0}-${JSON.stringify(currentRound.playerSelections)}`}
                 options={formatOptionsForForceField(currentRound.options || [])}
                 selectedAnswers={selectedAnswers}
                 onSelect={handleOptionSelect}
@@ -1618,6 +1619,31 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
           Return to Dashboard
         </Button>
       </div>
+      <style jsx>{`
+        @keyframes selection-flash-overlay {
+          0%, 100% { background-color: rgba(0, 255, 255, 0); } /* Transparent */
+          50% { background-color: rgba(0, 255, 255, 0.15); } /* Semi-transparent cyan */
+        }
+
+        /* Note: We target the element with the class directly */
+        /* instead of using ::after for simplicity with style jsx */
+        /* You could use ::after if preferred, but might need :global() */
+        .animate-selection-flash {
+          position: relative; /* Ensure positioning context for overlay */
+        }
+
+        .animate-selection-flash::after {
+          content: '';
+          position: absolute; /* Cover the entire parent */
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          pointer-events: none; /* !!! Important: Allows clicks to pass through !!! */
+          animation: selection-flash-overlay 0.3s ease-out; /* Apply the animation */
+          z-index: 100; /* Ensure it's visually on top - adjust if needed */
+        }
+      `}</style>
     </div>
   );
 }
