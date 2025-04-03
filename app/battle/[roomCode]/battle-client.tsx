@@ -223,7 +223,6 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
     return Math.max(1, currentRound.correctAnswers?.length || 1);
   }, [currentRound, gameState?.players]);
 
-
   const handleOptionSelect = useCallback((option: string) => {
     if (!socketRef.current) {
       console.error('Socket not connected, cannot select option');
@@ -235,7 +234,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
       return;
     }
     
-    console.log('Selecting genre:', option);
+    console.log('Requesting to select genre:', option);
     
     // Find the current round
     const currentRound = gameState?.rounds?.[gameState.currentRound || 0];
@@ -244,18 +243,10 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
       return;
     }
     
-    // Check if this genre is already selected by the current user
-    const isSelected = selectedAnswers.includes(option);
-
-    if (isSelected) {
-      console.log(`Genre ${option} is already selected, cannot deselect`);
-      return;
-    }
-    
     // Calculate max selections per player
     const maxSelectionsAllowed = optionsPerPlayer();
     
-    // ALWAYS allow deselection, but limit selections to max allowed
+    // Check if we already have max selections
     if (selectedAnswers.length >= maxSelectionsAllowed) {
       console.warn(`Cannot select more than ${maxSelectionsAllowed} genres`);
       return;
@@ -264,29 +255,23 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
     // Set selection in progress to prevent multiple rapid clicks
     setSelectionInProgress(true);
     
-    // Create the updated selections array first BEFORE updating state
-    const updatedSelections = [...selectedAnswers, option];
+    // Important: NO optimistic UI update here!
+    // Instead, wait for server confirmation
     
-    // Optimistically update UI with the same array we'll send to server
-    setSelectedAnswers(updatedSelections);
+    // Emit the selection request to the server
+    socketRef.current.emit('select-genre', { 
+      option,
+      action: 'select'
+    });
     
-    // Emit the selection with a slight delay to prevent network hammering
-    setTimeout(() => {
-      socketRef.current?.emit('select-genre', { 
-        option,
-        action: isSelected ? 'deselect' : 'select',
-        selections: updatedSelections  // Use the pre-calculated array
-      });
-      
-      // Add a longer timeout to reset selection state if server doesn't respond
-      const resetTimeout = setTimeout(() => {
-        console.log('Force resetting selection in progress state');
-        setSelectionInProgress(false);
-      }, 2000);
-      
-      // Store the timeout so we can clear it if server responds
-      window.lastResetTimeout = resetTimeout as unknown as number;
-    }, 100);
+    // Add a timeout to reset selection state if server doesn't respond
+    const resetTimeout = setTimeout(() => {
+      console.log('Force resetting selection in progress state');
+      setSelectionInProgress(false);
+    }, 2000);
+    
+    // Store the timeout so we can clear it if server responds
+    window.lastResetTimeout = resetTimeout as unknown as number;
   }, [socketRef, selectionInProgress, gameState, selectedAnswers, optionsPerPlayer]);
 
   // Function to check if the current player has already made all selections
@@ -685,10 +670,12 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
           });
           
           // Update local selected answers state for the current user
-          const userSelections = data.playerSelections[userId] || [];
-          console.log('Updating current user selections:', userSelections);
-          setSelectedAnswers(userSelections);
-        });
+          if (data.player === userId) {
+            const userSelections = data.playerSelections[userId] || [];
+            console.log('Updating current user selections:', userSelections);
+            setSelectedAnswers(userSelections);
+          }
+        });        
           
         // Round complete handler
         socket.on('round-complete', () => {
@@ -786,29 +773,8 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
         // Error handler
         socket.on('error', (data) => {
           console.error('Error event received:', data);
-          
-          // Clear any pending timeout
-          if (window.lastResetTimeout) {
-            clearTimeout(window.lastResetTimeout);
-            window.lastResetTimeout = undefined;
-          }
-          
-          // Always reset selection in progress state when receiving an error
-          setSelectionInProgress(false);
-          
-          // Show error message
           if (data.message) {
-            // Check if this is a selection-related error
-            if (data.message.includes('already selected by another player')) {
-              // Visual feedback could be added here
-              console.warn('Selection rejected:', data.message);
-              
-              // No need to update the error state for selection conflicts
-              // as it would interrupt the game flow
-            } else {
-              // For other errors, show the error message
-              setError(data.message);
-            }
+            setError(data.message);
           }
         });
         

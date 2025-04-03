@@ -95,6 +95,7 @@ interface MatchingDetail {
 interface SelectionsUpdatedData {
   playerSelections: Record<string, string[]>;
   player: string;
+  status: string;
   option: string;
   playerSelectionCounts: Record<string, number>;
   optionsPerPlayer: number;
@@ -467,7 +468,37 @@ export default async function SocketHandler(
         );
 
         if (isSelectedByOtherPlayer) {
-          socket.emit('error', { message: `Genre "${option}" already selected by another player` });
+          // Create an object from the Map for emitting to clients - needed for accurate state
+          const playerSelectionsObject: Record<string, string[]> = {};
+          for (const [encodedKey, value] of currentRound.playerSelections!.entries()) {
+            const originalKey = decodeEmail(encodedKey);
+            playerSelectionsObject[originalKey] = value;
+          }
+          
+          // Track selection counts for all players
+          const playerSelectionCounts: Record<string, number> = {};
+          const optionsPerPlayer = currentRound.correctAnswers.length;
+          
+          // Get all player IDs
+          const realPlayerIds = roomDoc.players.map(p => p.userId);
+          
+          // For each player, count their selections
+          for (const playerId of realPlayerIds) {
+            const encodedId = encodeEmail(playerId);
+            const playerSelectionsArray = currentRound.playerSelections?.get(encodedId) || [];
+            playerSelectionCounts[playerId] = playerSelectionsArray.length;
+          }
+          
+          // Send specific error response to requesting client
+          socket.emit('selections-updated', {
+            playerSelections: playerSelectionsObject,
+            player: userId,
+            option,
+            status: 'error',
+            playerSelectionCounts,
+            optionsPerPlayer
+          });
+          
           return;
         }
 
@@ -527,10 +558,20 @@ export default async function SocketHandler(
         }
         
         // Send updates to all clients
-        io.to(roomCode).emit('selections-updated', {
+        socket.emit('selections-updated', {
           playerSelections: playerSelectionsObject,
           player: userId,
           option,
+          status: 'success',
+          playerSelectionCounts,
+          optionsPerPlayer
+        });
+
+        socket.to(roomCode).emit('selections-updated', {
+          playerSelections: playerSelectionsObject,
+          player: userId,
+          option,
+          status:'success',
           playerSelectionCounts,
           optionsPerPlayer
         });
