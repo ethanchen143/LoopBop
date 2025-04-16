@@ -453,54 +453,7 @@ export default async function SocketHandler(
         }
         
         // Get current selections using encoded key
-        const currentPlayerSelections = currentRound.playerSelections.get(encodedUserId) || [];
-        
-        // Toggle selection
-        // Never allow deselection - only add new selections
-        
-
-        // Check if this option is already selected by another player
-        const isSelectedByOtherPlayer = Array.from(currentRound.playerSelections?.entries() || []).some(
-          ([encodedKey, selections]) => {
-            const decodedKey = decodeEmail(encodedKey);
-            return decodedKey !== userId && Array.isArray(selections) && selections.includes(option);
-          }
-        );
-
-        if (isSelectedByOtherPlayer) {
-          // Create an object from the Map for emitting to clients - needed for accurate state
-          const playerSelectionsObject: Record<string, string[]> = {};
-          for (const [encodedKey, value] of currentRound.playerSelections!.entries()) {
-            const originalKey = decodeEmail(encodedKey);
-            playerSelectionsObject[originalKey] = value;
-          }
-          
-          // Track selection counts for all players
-          const playerSelectionCounts: Record<string, number> = {};
-          const optionsPerPlayer = currentRound.correctAnswers.length;
-          
-          // Get all player IDs
-          const realPlayerIds = roomDoc.players.map(p => p.userId);
-          
-          // For each player, count their selections
-          for (const playerId of realPlayerIds) {
-            const encodedId = encodeEmail(playerId);
-            const playerSelectionsArray = currentRound.playerSelections?.get(encodedId) || [];
-            playerSelectionCounts[playerId] = playerSelectionsArray.length;
-          }
-          
-          // Send specific error response to requesting client
-          socket.emit('selections-updated', {
-            playerSelections: playerSelectionsObject,
-            player: userId,
-            option,
-            status: 'error',
-            playerSelectionCounts,
-            optionsPerPlayer
-          });
-          
-          return;
-        }
+        const currentPlayerSelections = currentRound.playerSelections.get(encodedUserId) || [];        
 
         // If already selected by current player, don't do anything (no toggling)
         if (currentPlayerSelections.includes(option)) {
