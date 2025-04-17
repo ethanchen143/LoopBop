@@ -115,7 +115,6 @@ export default function DashboardPage() {
   const [songDetails, setSongDetails] = useState<SongDetails | null>(null);
   const [showLeaderboard, setShowLeaderboard] = useState(true);
   const [showExplore, setShowExplore] = useState(false);
-  const [showTutorial, setShowTutorial] = useState(false);
 
   const [comments, setComments] = useState<CommentData[]>([]);
   const [newComment, setNewComment] = useState("");
@@ -3105,7 +3104,6 @@ export default function DashboardPage() {
                   className="mt-2 bg-gradient-to-r from-red-500 via-purple-600 to-blue-600 hover:from-red-600 hover:via-purple-700 hover:to-blue-700 text-white font-bold border-2 border-white pulsate-button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setShowTutorial(true);
                     setShowBattleModal(true);
                   }}
                 >
@@ -3286,8 +3284,8 @@ export default function DashboardPage() {
                     />
                   <p className="text-sm leading-tight text-gray-200">
                     &nbsp;Pick the <strong>correct genres</strong> for the track.<br/>
-                    &nbsp;There're <strong>players&nbsp;*&nbsp;correct‑options</strong> picks in total.<br/>
-                    &nbsp;Be quick—once a genre’s taken it’s gone!
+                    &nbsp;There&apos;re <strong>players&nbsp;*&nbsp;correct options</strong> picks in total.<br/>
+                    &nbsp;Be quick—once a genre&apos;s taken it&apos;s gone!
                   </p>
                 </div>
                   <div className="flex flex-col gap-4">

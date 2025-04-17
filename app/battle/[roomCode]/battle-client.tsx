@@ -203,6 +203,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
   // just to satisfy eslint
   console.log(showRoundResults);
   console.log(nextRoundClicked);
+  console.log(selectionInProgress)
   
   // Refs
   const forceFieldContainerRef = useRef<HTMLDivElement>(null);
@@ -223,60 +224,66 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
     return Math.max(1, currentRound.correctAnswers?.length || 1);
   }, [currentRound, gameState?.players]);
 
-  const handleOptionSelect = useCallback((option: string) => {
-    if (!socketRef.current) {
-      console.error('Socket not connected, cannot select option');
-      return;
-    }
-    
-    if (selectionInProgress) {
-      console.log('Selection already in progress, please wait');
-      return;
-    }
-    
-    console.log('Requesting to select genre:', option);
-    
-    // Find the current round
-    const currentRound = gameState?.rounds?.[gameState.currentRound || 0];
-    if (!currentRound) {
-      console.error('No current round found');
-      return;
-    }
-    
-    // Calculate max selections per player
-    const maxSelectionsAllowed = optionsPerPlayer();
-    
-    // Check if we already have max selections
-    if (selectedAnswers.length >= maxSelectionsAllowed) {
-      console.warn(`Cannot select more than ${maxSelectionsAllowed} genres`);
-      return;
-    }
-    
-    // Set selection in progress to prevent multiple rapid clicks
-    setSelectionInProgress(true);
-    
-    // Important: NO optimistic UI update here!
-    // Instead, wait for server confirmation
-    
-    // Emit the selection request to the server
-    socketRef.current.emit('select-genre', { 
-      option,
-      action: 'select'
-    });
+  // ————————————————————————————————————————————————————————————
+  //  BattleGameClient  ▶  replacement for handleOptionSelect
+  // ————————————————————————————————————————————————————————————
+  const handleOptionSelect = useCallback(
+    (option: string) => {
+      //------------------------------------------------------------------
+      // 1. guard clauses
+      //------------------------------------------------------------------
+      if (!socketRef.current) return;                        // socket missing
+      if (selectedAnswers.includes(option)) return;          // already chosen
+      const max = optionsPerPlayer();
+      if (selectedAnswers.length >= max) return;             // quota reached
 
-    setSelectedAnswers(prev => [...prev, option]);
-    const revert = () => setSelectedAnswers(prev => prev.filter(p => p !== option));
-    setSelectionInProgress(true);
-    
-    // Add a timeout to reset selection state if server doesn't respond
-    const resetTimeout = setTimeout(() => {
-      console.log('Force resetting selection in progress state');
-      setSelectionInProgress(false);
-    }, 2000);
-    
-    // Store the timeout so we can clear it if server responds
-    window.lastResetTimeout = resetTimeout as unknown as number;
-  }, [socketRef, selectionInProgress, gameState, selectedAnswers, optionsPerPlayer]);
+      //------------------------------------------------------------------
+      // 2. optimistic UI: hide the node immediately
+      //------------------------------------------------------------------
+      setSelectedAnswers(prev => [...prev, option]);         // local, pending
+
+      //------------------------------------------------------------------
+      // 3. ask the server and use ACK to finalise or roll back
+      //------------------------------------------------------------------
+      socketRef.current.emit(
+        "select-genre",
+        { option, action: "select" },
+        (
+          ack: {
+            status: "success" | "fail";
+            playerSelections: Record<string, string[]>;
+          }
+        ) => {
+          //--------------------------------------------------------------
+          // 3 a. SUCCESS ➜ accept server state, scoreboard refreshes
+          //--------------------------------------------------------------
+          if (ack.status === "success") {
+            setGameState(prev => {
+              if (!prev || !prev.rounds) return prev;
+              const rounds = [...prev.rounds];
+              const rIdx  = prev.currentRound ?? 0;
+              if (rounds[rIdx]) {
+                rounds[rIdx] = {
+                  ...rounds[rIdx],
+                  playerSelections: ack.playerSelections
+                };
+              }
+              return { ...prev, rounds };
+            });
+            setSelectedAnswers(ack.playerSelections[userId] || []); // confirm mine
+            return;
+          }
+
+          //--------------------------------------------------------------
+          // 3 b. FAIL ➜ someone else got it first – roll back
+          //--------------------------------------------------------------
+          setSelectedAnswers(prev => prev.filter(p => p !== option));
+        }
+      );
+    },
+    [socketRef, selectedAnswers, optionsPerPlayer, userId, setGameState]
+  );
+
 
   // Function to check if the current player has already made all selections
   const hasCompletedSelections = useCallback(() => {

@@ -496,63 +496,64 @@ const ForceFieldOptions: React.FC<ForceFieldProps> = ({
     }
   };
 
-  const showTooltipWithDelay = (event: MouseEvent, d: NodeDatum) => {
-    // Clear any existing timeout
-    if (tooltipTimeoutRef.current) {
-      clearTimeout(tooltipTimeoutRef.current);
-    }
+  // const showTooltipWithDelay = (event: MouseEvent, d: NodeDatum) => {
+  //   // Clear any existing timeout
+  //   if (tooltipTimeoutRef.current) {
+  //     clearTimeout(tooltipTimeoutRef.current);
+  //   }
     
-    // Set a new timeout to show the tooltip after 1.5 seconds
-    tooltipTimeoutRef.current = setTimeout(() => {
-      if (tooltipRef.current) {
-        // Position in center of window instead of following cursor
-        const windowWidth = window.innerWidth;
-        const windowHeight = window.innerHeight;
+  //   // Set a new timeout to show the tooltip after 1.5 seconds
+  //   tooltipTimeoutRef.current = setTimeout(() => {
+  //     if (tooltipRef.current) {
+  //       // Position in center of window instead of following cursor
+  //       const windowWidth = window.innerWidth;
+  //       const windowHeight = window.innerHeight;
         
-        tooltipRef.current.style.display = "block";
-        tooltipRef.current.style.opacity = "0";
-        tooltipRef.current.style.left = `${windowWidth / 2 - 150}px`; // Center horizontally (assuming max-width around 300px)
-        tooltipRef.current.style.top = `${windowHeight / 2 - 75}px`; // Center vertically (approximate)
+  //       tooltipRef.current.style.display = "block";
+  //       tooltipRef.current.style.opacity = "0";
+  //       tooltipRef.current.style.left = `${windowWidth / 2 - 150}px`; // Center horizontally (assuming max-width around 300px)
+  //       tooltipRef.current.style.top = `${windowHeight / 2 - 75}px`; // Center vertically (approximate)
         
-        let tooltipContent = `<strong class="text-lg block mb-2 text-cyan-300">${d.name}</strong>`;
-        tooltipContent += `<p class="text-white/90">${d.description}</p>`;
+  //       let tooltipContent = `<strong class="text-lg block mb-2 text-cyan-300">${d.name}</strong>`;
+  //       tooltipContent += `<p class="text-white/90">${d.description}</p>`;
         
-        // Add player info if option is selected
-        if (d.isSelected && d.selectedByPlayerName) {
-          const playerColor = d.playerColor || '#FFFFFF';
-          tooltipContent += `<div class="mt-2 pt-2 border-t border-gray-700">
-            <span style="color: ${playerColor}">Selected by ${d.selectedByPlayerName}</span>
-          </div>`;
-        }
+  //       // Add player info if option is selected
+  //       if (d.isSelected && d.selectedByPlayerName) {
+  //         const playerColor = d.playerColor || '#FFFFFF';
+  //         tooltipContent += `<div class="mt-2 pt-2 border-t border-gray-700">
+  //           <span style="color: ${playerColor}">Selected by ${d.selectedByPlayerName}</span>
+  //         </div>`;
+  //       }
         
-        tooltipRef.current.innerHTML = tooltipContent;
+  //       tooltipRef.current.innerHTML = tooltipContent;
         
-        // Force a reflow
-        void tooltipRef.current.offsetWidth;
+  //       // Force a reflow
+  //       void tooltipRef.current.offsetWidth;
         
-        tooltipRef.current.style.opacity = "0.85"; // Lower opacity
-      }
-    }, 1500); // 1.5 seconds delay
-  };
+  //       tooltipRef.current.style.opacity = "0.85"; // Lower opacity
+  //     }
+  //   }, 1500); // 1.5 seconds delay
+  // };
+  
   
   // Function to hide tooltip and clear timeout
-  const hideTooltip = () => {
-    if (tooltipTimeoutRef.current) {
-      clearTimeout(tooltipTimeoutRef.current);
-      tooltipTimeoutRef.current = null;
-    }
+  // const hideTooltip = () => {
+  //   if (tooltipTimeoutRef.current) {
+  //     clearTimeout(tooltipTimeoutRef.current);
+  //     tooltipTimeoutRef.current = null;
+  //   }
     
-    if (tooltipRef.current) {
-      tooltipRef.current.style.opacity = "0";
+  //   if (tooltipRef.current) {
+  //     tooltipRef.current.style.opacity = "0";
       
-      // After fade-out, hide the element
-      setTimeout(() => {
-        if (tooltipRef.current) {
-          tooltipRef.current.style.display = "none";
-        }
-      }, 200);
-    }
-  };
+  //     // After fade-out, hide the element
+  //     setTimeout(() => {
+  //       if (tooltipRef.current) {
+  //         tooltipRef.current.style.display = "none";
+  //       }
+  //     }, 200);
+  //   }
+  // };
 
   // UPDATED: Check for good node layout after initialization
   useEffect(() => {
