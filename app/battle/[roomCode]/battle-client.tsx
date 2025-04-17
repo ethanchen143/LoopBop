@@ -190,7 +190,10 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
   const [gameState, setGameState] = useState<Partial<GameState> | null>(null);
   const [userId, setUserId] = useState<string>("");
   const [videoId, setVideoId] = useState("");
+
   const [selectedAnswers, setSelectedAnswers] = useState<string[]>([]);
+  const [optimisticallySelected, setOptimisticallySelected] = useState<string[]>([]);
+
   const [showRoundResults, setShowRoundResults] = useState(false);
   const [expandedPlayerId, setExpandedPlayerId] = useState<string | null>(null);
   const [showFinalResults, setShowFinalResults] = useState(false);
@@ -200,7 +203,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
   const [nextRoundClicked, setNextRoundClicked] = useState(false);
   const [currentPlayerReady, setCurrentPlayerReady] = useState(false); // Track current player's ready status
 
-  const [optimisticallySelected, setOptimisticallySelected] = useState<string[]>([]);
+  
   
   // just to satisfy eslint
   console.log(showRoundResults);
@@ -232,63 +235,84 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
         console.error("Socket not connected");
         return;
       }
-      // Prevent clicking if already selected (optimistically or confirmed)
-      if (selectedAnswers.includes(option) || optimisticallySelected.includes(option)) {
-        console.log("Option already selected:", option);
-        return;
+      if (!currentRound || currentRound.status !== 'selecting') {
+          console.warn("Cannot select: Not in selecting phase.");
+          return;
       }
 
       const max = optionsPerPlayer();
-      // Prevent clicking if quota reached (optimistically or confirmed)
+
+      // Combined check: already confirmed OR already optimistically selected
+      if (selectedAnswers.includes(option) || optimisticallySelected.includes(option)) {
+        console.log("Option already selected (confirmed or optimistically):", option);
+        return;
+      }
+
+      // Combined check: quota reached considering confirmed AND optimistic selections
       if (selectedAnswers.length + optimisticallySelected.length >= max) {
-        console.log("Max selections reached");
-        // Optionally show a message to the user
+        console.log(`Max selections (${max}) reached (considering optimistic).`);
+        // Optionally show a brief message to the user
+        // e.g., toast.info(`You can only select ${max} options.`);
         return;
       }
 
       console.log(`Optimistically selecting: ${option}`);
       // 1. Optimistic UI Update: Add to temporary optimistic state
       setOptimisticallySelected(prev => [...prev, option]);
-      // Note: The UI rendering the options should now consider BOTH `selectedAnswers` and `optimisticallySelected`
+      // UI rendering will now use `allSelectedForDisplay` which includes this
 
       // 2. Emit event to server with ACK callback
       socketRef.current.emit(
         "select-genre",
-        { option }, // Removed action: 'select', server determines based on state
+        { option },
         (ack: {
             status: "success" | "fail";
-            playerSelections?: Record<string, string[]>; // Make optional for fail case
+            // Server sends back the user's *confirmed* selections on success
+            playerSelections?: Record<string, string[]>;
             message?: string;
          }) => {
           console.log(`ACK received for ${option}:`, ack);
 
-          // Remove from optimistic state regardless of outcome
-          setOptimisticallySelected(prev => prev.filter(item => item !== option));
+          // 3. Remove from optimistic state regardless of outcome
+          // Use functional update to ensure we're working with the latest state
+          setOptimisticallySelected(prevOptimistic => prevOptimistic.filter(item => item !== option));
 
           if (ack.status === "success" && ack.playerSelections) {
-            // 3a. SUCCESS: Server confirmed.
-            // Sync local *confirmed* selections with the server's truth for this user.
-            // The broadcast 'selections-updated' will handle the global gameState update.
+            // 4a. SUCCESS: Server confirmed.
+            // Sync local *confirmed* selections with the server's accurate state for this user provided in the ACK.
+            // This makes the UI instantly consistent for the user even before the broadcast.
             const myConfirmedSelections = ack.playerSelections[userId] || [];
             setSelectedAnswers(myConfirmedSelections);
-            console.log(`Selection confirmed for ${option}. My selections:`, myConfirmedSelections);
+            console.log(`Selection confirmed via ACK for ${option}. My selections now:`, myConfirmedSelections);
 
-            // Trigger a visual update if needed (e.g., ForceField re-render)
-             setContainerDimensions(prev => ({ ...prev, width: prev.width + 0.0001 }));
-             setTimeout(() => setContainerDimensions(dimensionsRef.current), 50);
+            // Optional: Trigger visual refresh if needed (e.g., ForceField might need explicit trigger)
+            // Consider if ForceField already reacts to selectedAnswers change. If not:
+            // setContainerDimensions(prev => ({ ...prev, width: prev.width + 0.0001 }));
+            // setTimeout(() => setContainerDimensions(dimensionsRef.current), 50);
 
-          } else {
-            // 3b. FAIL: Server rejected. The optimistic update was wrong.
+          } else if (ack.status === "fail") {
+            // 4b. FAIL: Server rejected.
             // State is already reverted by removing from `optimisticallySelected`.
             // `selectedAnswers` remains unchanged.
             console.warn(`Selection failed for ${option}: ${ack.message || 'Unknown reason'}`);
             // Optionally: Show a brief error message to the user (e.g., using a toast library)
-            // alert(`Couldn't select ${option}: ${ack.message}`); // Example alert
+            // e.g., toast.error(`Couldn't select ${option}: ${ack.message}`);
+          } else {
+             // Handle unexpected ACK format (optional)
+             console.error("Received unexpected ACK format:", ack);
           }
         }
       );
     },
-    [socketRef, selectedAnswers, optimisticallySelected, optionsPerPlayer, userId, setGameState] // Add dependencies
+    [
+      socketRef,
+      currentRound, // Add dependency
+      selectedAnswers,
+      optimisticallySelected,
+      optionsPerPlayer,
+      userId,
+      // No need for setGameState here directly
+    ]
   );
 
 
@@ -400,7 +424,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
         optionsPerPlayer: number;
     }) => {
         console.log('Processing broadcast: selections-updated', data);
-
+      
         setGameState(prev => {
             if (!prev || !prev.rounds || prev.currentRound === undefined || !prev.rounds[prev.currentRound]) {
                 console.warn("Cannot update selections, invalid game state:", prev);
@@ -413,9 +437,14 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
                 : JSON.parse(JSON.stringify(prev));
 
             // Update the player selections in the current round of the gameState
-            newState.rounds[newState.currentRound].playerSelections = data.playerSelections;
+            const currentRoundState = { ...newState.rounds[newState.currentRound] };
+            currentRoundState.playerSelections = data.playerSelections;
+            newState.rounds = [
+                ...newState.rounds.slice(0, newState.currentRound),
+                currentRoundState,
+                ...newState.rounds.slice(newState.currentRound + 1)
+            ];
 
-            console.log("Updated gameState selections:", newState.rounds[newState.currentRound].playerSelections);
             return newState;
         });
 
@@ -424,12 +453,20 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
         // The ACK handler might re-set this, but it should converge to the same state.
         const myServerSelections = data.playerSelections[userId] || [];
         setSelectedAnswers(myServerSelections);
-        console.log("Synced local selectedAnswers from broadcast:", myServerSelections);
+        setSelectedAnswers(prevSelected => {
+          // Only log if it actually changes
+          if (JSON.stringify(prevSelected) !== JSON.stringify(myServerSelections)) {
+               console.log("Synced local selectedAnswers from broadcast:", myServerSelections);
+          }
+          return myServerSelections;
+        });
 
         // Trigger ForceField refresh if needed
-        setContainerDimensions(prev => ({ ...prev, width: prev.width + 0.0001 }));
-        setTimeout(() => setContainerDimensions(dimensionsRef.current), 50);
+        // setContainerDimensions(prev => ({ ...prev, width: prev.width + 0.0001 }));
+        // setTimeout(() => setContainerDimensions(dimensionsRef.current), 50);
     };
+
+    
     const initSocket = async () => {
       try {
         // First get the user ID
@@ -647,6 +684,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
           // Reset round-specific state
           setRoundComplete(false);
           setSelectedAnswers([]);
+          setOptimisticallySelected([]); // Reset optimistic
           setShowRoundResults(false);
           setSelectionInProgress(false);
           setCurrentPlayerReady(false); // Reset ready status for new round
@@ -661,8 +699,8 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
             }
             setTimeout(() => {
               setLoading(false);
-            }, 200);
-          }, 100);
+            }, 100);
+          }, 50);
         });
         
         // Handle player ready status updates
@@ -832,6 +870,8 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
         socketRef.current.disconnect();
         socketRef.current = null;
       }
+      if (window.lastResetTimeout) clearTimeout(window.lastResetTimeout);
+      if (window.nextRoundTimeout) clearTimeout(window.nextRoundTimeout);
     };
   }, [socketRef, roomCode, router]); // Only dependencies that won't change
 
@@ -980,7 +1020,10 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
     });
   }, []);
 
-  const allSelectedForDisplay = useMemo(() => [...selectedAnswers, ...optimisticallySelected], [selectedAnswers, optimisticallySelected]);
+  const allSelectedForDisplay = useMemo(() => {
+    // Use a Set to efficiently combine and deduplicate
+    return Array.from(new Set([...selectedAnswers, ...optimisticallySelected]));
+  }, [selectedAnswers, optimisticallySelected]);
 
 
   if (loading) {

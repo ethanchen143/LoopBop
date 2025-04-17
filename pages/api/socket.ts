@@ -8,6 +8,7 @@ import User, { IUser } from "@/models/User";
 import { getBattleData } from "@/lib/battleService";
 import { Document } from 'mongoose';
 
+
 // Define types for socket data
 interface SocketData {
   userId: string;
@@ -422,122 +423,180 @@ export default async function SocketHandler(
     });
     
     // Select genre handler
-    socket.on('select-genre', async (data: { option: string }, ack: (response: SelectGenreAckData) => void) => {
-      try {
-          const { option } = data;
-          const { userId, roomCode } = socket.data;
-  
-          if (!userId || !roomCode) {
-              if (ack) ack({ status: 'fail', message: 'Not in a room' });
-              socket.emit('error', { message: 'Not in a room' });
-              return;
-          }
-  
-          console.log(`User ${userId} attempting to select genre ${option} in room ${roomCode}`);
-          const encodedUserId = encodeEmail(userId);
-  
-          await connectToDatabase();
-          const roomDoc = await BattleRoom.findOne({ code: roomCode }) as (Document & IBattleRoom) | null;
-  
-          if (!roomDoc || roomDoc.status !== 'round_in_progress') {
-              if (ack) ack({ status: 'fail', message: 'Invalid room state' });
-              return;
-          }
-  
-          const currentRoundIndex = roomDoc.currentRound;
-          const currentRound = roomDoc.rounds[currentRoundIndex];
-          if (!currentRound || currentRound.status !== 'selecting') {
-              if (ack) ack({ status: 'fail', message: 'Round not in selecting state' });
-              return;
-          }
-  
-          if (!currentRound.playerSelections) {
-              currentRound.playerSelections = new Map<string, string[]>();
-          }
-  
-          const currentPlayerSelections = currentRound.playerSelections.get(encodedUserId) || [];
-  
-          if (currentPlayerSelections.includes(option)) {
-              const currentSelectionsObject: Record<string, string[]> = {};
-              for (const [encodedKey, value] of currentRound.playerSelections.entries()) {
-                  currentSelectionsObject[decodeEmail(encodedKey)] = value;
-              }
-              // Acknowledge success as the desired state (option selected) is already true for this user.
-              if (ack) ack({ status: 'success', playerSelections: currentSelectionsObject });
-              return;
-          }
-  
-          const maxSelections = currentRound.correctAnswers.length;
-          if (currentPlayerSelections.length >= maxSelections) {
-              if (ack) ack({ status: 'fail', message: `Maximum selections reached (${maxSelections})` });
-              return;
-          }
-  
-          const updatedSelections = [...currentPlayerSelections, option];
-          currentRound.playerSelections.set(encodedUserId, updatedSelections);
-          roomDoc.markModified(`rounds.${currentRoundIndex}.playerSelections`);
-          await roomDoc.save();
-  
-          // Fetch the latest state after saving to ensure consistency
-          const updatedRoom = await BattleRoom.findOne({ code: roomCode }) as (Document & IBattleRoom) | null;
-          if (!updatedRoom) {
-             // This is unlikely but handle it defensively
-             console.error(`Room ${roomCode} not found immediately after saving selection for user ${userId}`);
-             if (ack) ack({ status: 'fail', message: 'Room data inconsistent after save' });
-             return;
-          }
-          const confirmedRound = updatedRoom.rounds[currentRoundIndex];
-          const confirmedSelectionsMap = confirmedRound.playerSelections || new Map<string, string[]>();
-  
-          const playerSelectionsObject: Record<string, string[]> = {};
-          const playerSelectionCounts: Record<string, number> = {};
-          const optionsPerPlayer = confirmedRound.correctAnswers.length;
-          const realPlayerIds = updatedRoom.players.map(p => p.userId);
-  
-          for (const [encodedKey, value] of confirmedSelectionsMap.entries()) {
-              const originalKey = decodeEmail(encodedKey);
-              playerSelectionsObject[originalKey] = value;
-          }
-  
-          for (const playerId of realPlayerIds) {
-              const encodedId = encodeEmail(playerId);
-              const count = confirmedSelectionsMap.get(encodedId)?.length || 0;
-              playerSelectionCounts[playerId] = count;
-          }
-  
-          // Acknowledge success to the requesting client
-          if (ack) ack({ status: 'success', playerSelections: playerSelectionsObject });
-  
-          // Broadcast the updated state to all clients in the room
-          io.to(roomCode).emit('selections-updated', {
-              playerSelections: playerSelectionsObject,
-              player: userId,
-              option: option,
-              status: 'success',
-              playerSelectionCounts,
-              optionsPerPlayer
-          });
-  
-          // Check if the round is now complete
-          const isReadyForEvaluation = realPlayerIds.every((playerId: string) => {
-              const encodedId = encodeEmail(playerId);
-              return (confirmedSelectionsMap.get(encodedId)?.length || 0) >= optionsPerPlayer;
-          });
-  
-          console.log(`Is round ready for evaluation after ${userId} selected ${option}: ${isReadyForEvaluation}`);
-          if (isReadyForEvaluation) {
-              io.to(roomCode).emit('round-complete');
-          }
-  
-      } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          console.error('Error selecting genre:', error);
-          // Acknowledge failure on server error
-          if (ack) ack({ status: 'fail', message: 'Server error during selection: ' + errorMessage });
-          // Emit general error for logging/debugging
-          socket.emit('error', { message: 'Failed to select genre: ' + errorMessage });
+    socket.on('select-genre', async (data: { option: string }, ack) => {
+      const { option } = data;
+      const { userId, roomCode } = socket.data;
+
+      // Ensure ack is a function before proceeding
+      if (typeof ack !== 'function') {
+        console.error(`User ${userId} in room ${roomCode}: No ack function provided for select-genre.`);
+        // Optionally emit an error back if ack is missing, though it shouldn't happen with correct client code
+        socket.emit('error', { message: 'Internal error: Missing acknowledgement callback.' });
+        return;
       }
-  });
+
+      if (!userId || !roomCode) {
+        console.warn(`select-genre attempt from socket ${socket.id} without userId or roomCode.`);
+        return ack({ status: 'fail', message: 'Not properly joined to a room.' });
+      }
+
+      console.log(`User ${userId} attempting to select genre '${option}' in room ${roomCode}`);
+      const encodedUserId = encodeEmail(userId);
+
+      try {
+        await connectToDatabase();
+
+        // --- Step 1: Fetch the current room state ---
+        const roomDoc = await BattleRoom.findOne({ code: roomCode }) as (Document & IBattleRoom) | null;
+
+        // --- Step 2: Perform Pre-Update Checks ---
+        if (!roomDoc) {
+          return ack({ status: 'fail', message: 'Room not found.' });
+        }
+        if (roomDoc.status !== 'round_in_progress') {
+          return ack({ status: 'fail', message: 'Game is not in progress.' });
+        }
+
+        const currentRoundIndex = roomDoc.currentRound;
+        // Need to cast rounds array elements to ensure type safety if necessary
+        const currentRound = roomDoc.rounds[currentRoundIndex];
+
+        if (!currentRound || currentRound.status !== 'selecting') {
+          return ack({ status: 'fail', message: 'Round is not active for selection.' });
+        }
+
+        // Ensure playerSelections map exists
+        if (!currentRound.playerSelections) {
+            currentRound.playerSelections = new Map<string, string[]>();
+        }
+        const currentPlayerSelections = currentRound.playerSelections.get(encodedUserId) || [];
+
+        // Check if option already selected by this player
+        if (currentPlayerSelections.includes(option)) {
+          console.log(`User ${userId} already selected '${option}'.`);
+          // Already selected, acknowledge success with current state
+          return ack({
+              status: 'success',
+              playerSelections: { [userId]: currentPlayerSelections } // Return current selections
+          });
+        }
+
+        // Check if player has already reached the maximum selections
+        const maxSelections = currentRound.correctAnswers?.length || 1;
+        if (currentPlayerSelections.length >= maxSelections) {
+          console.log(`User ${userId} has already reached max selections (${maxSelections}).`);
+          return ack({ status: 'fail', message: `Maximum selections (${maxSelections}) already reached.` });
+        }
+
+        // --- Step 3: Attempt Atomic Update ---
+        const selectionPath = `rounds.${currentRoundIndex}.playerSelections.${encodedUserId}`;
+
+        const updateResult = await BattleRoom.updateOne(
+          {
+            code: roomCode,
+            _id: roomDoc._id, // Ensure we target the exact document
+            __v: roomDoc.__v, // Optimistic concurrency control using Mongoose's version key
+            status: 'round_in_progress', // Ensure still in progress
+            [`rounds.${currentRoundIndex}.status`]: 'selecting', // Ensure round still selecting
+            // Add condition to ensure the specific option isn't *already* in the array for this user
+            // This prevents adding duplicates even if the in-memory check above passed due to a race condition
+            [selectionPath]: { $ne: option },
+            // Check length constraint using $expr and $size (more robust than relying solely on in-memory check)
+            $expr: { $lt: [ { $size: { $ifNull: [`$${selectionPath}`, []] } }, maxSelections ] }
+
+          },
+          {
+            $push: { [selectionPath]: option } // Add the option to the user's array
+          }
+        );
+
+        // --- Step 4: Handle Update Result ---
+        if (updateResult.modifiedCount === 1) {
+          // SUCCESS! The update went through.
+          console.log(`User ${userId} successfully selected '${option}' in room ${roomCode}.`);
+
+          // Construct the user's *new* confirmed selections
+          const newUserSelections = [...currentPlayerSelections, option];
+
+          // Acknowledge success to the specific client FIRST
+          ack({
+              status: 'success',
+              playerSelections: { [userId]: newUserSelections }
+          });
+
+          // Now, prepare data for broadcast
+          // Fetch the *very latest* room doc again to ensure broadcast data is consistent
+          // (Alternatively, update the in-memory roomDoc carefully, but fetching is safer)
+          const updatedRoomDoc = await BattleRoom.findOne({ code: roomCode }) as IBattleRoom | null;
+          if (!updatedRoomDoc) {
+              console.error(`CRITICAL: Room ${roomCode} disappeared after successful update for ${userId}`);
+              return; // Avoid broadcasting stale/incorrect data
+          }
+          const finalRoundState = updatedRoomDoc.rounds[updatedRoomDoc.currentRound];
+          const finalSelectionsMap = finalRoundState.playerSelections || new Map<string, string[]>();
+
+          const broadcastSelections: Record<string, string[]> = {};
+          const broadcastCounts: Record<string, number> = {};
+          const realPlayerIds = updatedRoomDoc.players.map(p => p.userId);
+
+          for (const [encodedKey, value] of finalSelectionsMap.entries()) {
+              const originalKey = decodeEmail(encodedKey);
+              broadcastSelections[originalKey] = value;
+          }
+           // Calculate counts for *all* players based on the final state
+          for (const pId of realPlayerIds) {
+              broadcastCounts[pId] = finalSelectionsMap.get(encodeEmail(pId))?.length || 0;
+          }
+
+          // Broadcast the updated state to everyone
+          io.to(roomCode).emit('selections-updated', {
+              playerSelections: broadcastSelections,
+              player: userId, // Inform who triggered this update
+              option: option, // Inform which option was added
+              status: 'success',
+              playerSelectionCounts: broadcastCounts,
+              optionsPerPlayer: maxSelections
+          });
+
+          // Check if the round is now complete AFTER the successful update and broadcast
+          const isReadyForEvaluation = realPlayerIds.every(playerId =>
+              (finalSelectionsMap.get(encodeEmail(playerId))?.length || 0) >= maxSelections
+          );
+
+          if (isReadyForEvaluation) {
+              console.log(`Round ${currentRoundIndex} in room ${roomCode} is now complete.`);
+              // Use timeout to prevent race condition with final selection broadcast/ack
+              setTimeout(() => {
+                 io.to(roomCode).emit('round-complete');
+              }, 100); // Small delay
+          }
+
+        } else {
+          // FAILURE: modifiedCount was 0. Update didn't happen.
+          // This means the conditions in updateOne failed (likely __v mismatch due to concurrent update,
+          // or the $ne: option check failed, or the $expr length check failed).
+          console.warn(`User ${userId} selection failed for '${option}' (concurrent update or condition fail). Result:`, updateResult);
+
+          // Fetch the current selections again to see the actual state
+          const currentDocAfterFail = await BattleRoom.findOne({ code: roomCode }) as IBattleRoom | null;
+          const actualSelections = currentDocAfterFail?.rounds[currentRoundIndex]?.playerSelections?.get(encodedUserId) || [];
+
+          ack({
+            status: 'fail',
+            message: 'Selection failed. Option might be taken or limit reached.',
+            playerSelections: { [userId]: actualSelections } // Send current state on failure too
+          });
+        }
+
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`Error processing select-genre for user ${userId} in room ${roomCode}:`, error);
+        // Acknowledge failure on server error
+        ack({ status: 'fail', message: 'Server error during selection: ' + errorMessage });
+        socket.emit('error', { message: 'Failed to select genre: ' + errorMessage }); // Also emit general error
+      }
+    });
+    
 
     socket.on('player-ready', async (data: { isReady: boolean }) => {
       try {
@@ -676,7 +735,7 @@ export default async function SocketHandler(
             
             // Important: Use a proper absolute URL for server-side fetch
             // If this is running in the same Next.js instance, we need to form a complete URL
-            const apiUrl = new URL('/api/genre-similarity', 'http://localhost:3000').toString();
+            const apiUrl = new URL('/api/evaluate', 'http://localhost:3000').toString();
             
             const response = await fetch(apiUrl, {
               method: 'POST',

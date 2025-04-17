@@ -50,6 +50,7 @@ export interface IBattleRoom extends Document {
   rounds: IRound[];
   createdAt: Date;
   playersReady?: Map<string, boolean>;
+  __v?: number;
 }
 
 // Schema definitions
