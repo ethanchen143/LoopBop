@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useLayoutEffect, useCallback } from "react";
+import { useEffect, useState, useRef, useLayoutEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -199,6 +199,8 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
   const [roundComplete, setRoundComplete] = useState(false);
   const [nextRoundClicked, setNextRoundClicked] = useState(false);
   const [currentPlayerReady, setCurrentPlayerReady] = useState(false); // Track current player's ready status
+
+  const [optimisticallySelected, setOptimisticallySelected] = useState<string[]>([]);
   
   // just to satisfy eslint
   console.log(showRoundResults);
@@ -224,64 +226,69 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
     return Math.max(1, currentRound.correctAnswers?.length || 1);
   }, [currentRound, gameState?.players]);
 
-  // ————————————————————————————————————————————————————————————
-  //  BattleGameClient  ▶  replacement for handleOptionSelect
-  // ————————————————————————————————————————————————————————————
   const handleOptionSelect = useCallback(
     (option: string) => {
-      //------------------------------------------------------------------
-      // 1. guard clauses
-      //------------------------------------------------------------------
-      if (!socketRef.current) return;                        // socket missing
-      if (selectedAnswers.includes(option)) return;          // already chosen
+      if (!socketRef.current) {
+        console.error("Socket not connected");
+        return;
+      }
+      // Prevent clicking if already selected (optimistically or confirmed)
+      if (selectedAnswers.includes(option) || optimisticallySelected.includes(option)) {
+        console.log("Option already selected:", option);
+        return;
+      }
+
       const max = optionsPerPlayer();
-      if (selectedAnswers.length >= max) return;             // quota reached
+      // Prevent clicking if quota reached (optimistically or confirmed)
+      if (selectedAnswers.length + optimisticallySelected.length >= max) {
+        console.log("Max selections reached");
+        // Optionally show a message to the user
+        return;
+      }
 
-      //------------------------------------------------------------------
-      // 2. optimistic UI: hide the node immediately
-      //------------------------------------------------------------------
-      setSelectedAnswers(prev => [...prev, option]);         // local, pending
+      console.log(`Optimistically selecting: ${option}`);
+      // 1. Optimistic UI Update: Add to temporary optimistic state
+      setOptimisticallySelected(prev => [...prev, option]);
+      // Note: The UI rendering the options should now consider BOTH `selectedAnswers` and `optimisticallySelected`
 
-      //------------------------------------------------------------------
-      // 3. ask the server and use ACK to finalise or roll back
-      //------------------------------------------------------------------
+      // 2. Emit event to server with ACK callback
       socketRef.current.emit(
         "select-genre",
-        { option, action: "select" },
-        (
-          ack: {
+        { option }, // Removed action: 'select', server determines based on state
+        (ack: {
             status: "success" | "fail";
-            playerSelections: Record<string, string[]>;
-          }
-        ) => {
-          //--------------------------------------------------------------
-          // 3 a. SUCCESS ➜ accept server state, scoreboard refreshes
-          //--------------------------------------------------------------
-          if (ack.status === "success") {
-            setGameState(prev => {
-              if (!prev || !prev.rounds) return prev;
-              const rounds = [...prev.rounds];
-              const rIdx  = prev.currentRound ?? 0;
-              if (rounds[rIdx]) {
-                rounds[rIdx] = {
-                  ...rounds[rIdx],
-                  playerSelections: ack.playerSelections
-                };
-              }
-              return { ...prev, rounds };
-            });
-            setSelectedAnswers(ack.playerSelections[userId] || []); // confirm mine
-            return;
-          }
+            playerSelections?: Record<string, string[]>; // Make optional for fail case
+            message?: string;
+         }) => {
+          console.log(`ACK received for ${option}:`, ack);
 
-          //--------------------------------------------------------------
-          // 3 b. FAIL ➜ someone else got it first – roll back
-          //--------------------------------------------------------------
-          setSelectedAnswers(prev => prev.filter(p => p !== option));
+          // Remove from optimistic state regardless of outcome
+          setOptimisticallySelected(prev => prev.filter(item => item !== option));
+
+          if (ack.status === "success" && ack.playerSelections) {
+            // 3a. SUCCESS: Server confirmed.
+            // Sync local *confirmed* selections with the server's truth for this user.
+            // The broadcast 'selections-updated' will handle the global gameState update.
+            const myConfirmedSelections = ack.playerSelections[userId] || [];
+            setSelectedAnswers(myConfirmedSelections);
+            console.log(`Selection confirmed for ${option}. My selections:`, myConfirmedSelections);
+
+            // Trigger a visual update if needed (e.g., ForceField re-render)
+             setContainerDimensions(prev => ({ ...prev, width: prev.width + 0.0001 }));
+             setTimeout(() => setContainerDimensions(dimensionsRef.current), 50);
+
+          } else {
+            // 3b. FAIL: Server rejected. The optimistic update was wrong.
+            // State is already reverted by removing from `optimisticallySelected`.
+            // `selectedAnswers` remains unchanged.
+            console.warn(`Selection failed for ${option}: ${ack.message || 'Unknown reason'}`);
+            // Optionally: Show a brief error message to the user (e.g., using a toast library)
+            // alert(`Couldn't select ${option}: ${ack.message}`); // Example alert
+          }
         }
       );
     },
-    [socketRef, selectedAnswers, optionsPerPlayer, userId, setGameState]
+    [socketRef, selectedAnswers, optimisticallySelected, optionsPerPlayer, userId, setGameState] // Add dependencies
   );
 
 
@@ -382,6 +389,47 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
   
   // Socket connection and game state initialization
   useEffect(() => {
+
+
+    const handleSelectionsUpdated = (data: {
+        playerSelections: Record<string, string[]>;
+        player: string;
+        option: string;
+        status: string;
+        playerSelectionCounts: Record<string, number>;
+        optionsPerPlayer: number;
+    }) => {
+        console.log('Processing broadcast: selections-updated', data);
+
+        setGameState(prev => {
+            if (!prev || !prev.rounds || prev.currentRound === undefined || !prev.rounds[prev.currentRound]) {
+                console.warn("Cannot update selections, invalid game state:", prev);
+                return prev;
+            }
+
+            // Deep clone is important here to avoid mutation issues
+            const newState = typeof structuredClone !== 'undefined'
+                ? structuredClone(prev)
+                : JSON.parse(JSON.stringify(prev));
+
+            // Update the player selections in the current round of the gameState
+            newState.rounds[newState.currentRound].playerSelections = data.playerSelections;
+
+            console.log("Updated gameState selections:", newState.rounds[newState.currentRound].playerSelections);
+            return newState;
+        });
+
+        // **Crucially, re-sync the local `selectedAnswers` based on the broadcasted truth**
+        // This ensures consistency even if the ACK arrives slightly after the broadcast.
+        // The ACK handler might re-set this, but it should converge to the same state.
+        const myServerSelections = data.playerSelections[userId] || [];
+        setSelectedAnswers(myServerSelections);
+        console.log("Synced local selectedAnswers from broadcast:", myServerSelections);
+
+        // Trigger ForceField refresh if needed
+        setContainerDimensions(prev => ({ ...prev, width: prev.width + 0.0001 }));
+        setTimeout(() => setContainerDimensions(dimensionsRef.current), 50);
+    };
     const initSocket = async () => {
       try {
         // First get the user ID
@@ -647,46 +695,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
           }
         });
         
-        socket.on('selections-updated', (data) => {
-          console.log('Selections updated event received:', data);
-          console.log('Player selections received:', JSON.stringify(data.playerSelections));
-          
-          // Clear the reset timeout if it exists
-          if (window.lastResetTimeout) {
-            clearTimeout(window.lastResetTimeout);
-            window.lastResetTimeout = undefined;
-          }
-          
-          // Always reset selection in progress flag when receiving a response
-          setSelectionInProgress(false);
-          
-          // Update game state with new player selections
-          setGameState(prev => {
-            if (!prev || !prev.rounds) return prev;
-            
-            // Use structuredClone for proper deep cloning (or JSON parse/stringify if not available)
-            const updatedRounds = typeof structuredClone !== 'undefined' 
-              ? structuredClone(prev.rounds)
-              : JSON.parse(JSON.stringify(prev.rounds));
-            
-            // Update the current round with the new player selections
-            if (updatedRounds[prev.currentRound || 0]) {
-              updatedRounds[prev.currentRound || 0] = {
-                ...updatedRounds[prev.currentRound || 0],
-                playerSelections: data.playerSelections
-              };
-            }
-            
-            return { ...prev, rounds: updatedRounds };
-          });
-          
-          // Only update local selected answers state if this was a success for the current user
-          if (data.player === userId && (data.status === 'success' || !data.status)) {
-            const userSelections = data.playerSelections[userId] || [];
-            console.log('Updating current user selections:', userSelections);
-            setSelectedAnswers(userSelections);
-          }
-        });   
+        socket.on('selections-updated', handleSelectionsUpdated);   
           
         // Round complete handler
         socket.on('round-complete', () => {
@@ -819,11 +828,12 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
     return () => {
       if (socketRef.current) {
         console.log('Disconnecting socket on component unmount');
+        socketRef.current?.off('selections-updated', handleSelectionsUpdated);
         socketRef.current.disconnect();
         socketRef.current = null;
       }
     };
-  }, [roomCode, router]); // Only dependencies that won't change
+  }, [socketRef, roomCode, router]); // Only dependencies that won't change
 
   useEffect(() => {
     if (!currentRound || !currentRound.playerSelections) return;
@@ -969,6 +979,8 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
       }
     });
   }, []);
+
+  const allSelectedForDisplay = useMemo(() => [...selectedAnswers, ...optimisticallySelected], [selectedAnswers, optimisticallySelected]);
 
 
   if (loading) {
@@ -1564,11 +1576,11 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
                 <ForceFieldOptions
                 key={`forcefield-${roomCode}-${gameState.currentRound || 0}`}
                 options={formatOptionsForForceField(currentRound.options || [])}
-                selectedAnswers={selectedAnswers}
+                selectedAnswers={allSelectedForDisplay}
                 onSelect={handleOptionSelect}
                 containerWidth={containerDimensions.width}
                 containerHeight={containerDimensions.height}
-                disabled={!isMyTurn() || hasCompletedSelections()}
+                disabled={!isMyTurn() || (selectedAnswers.length + optimisticallySelected.length >= optionsPerPlayer())}
                 playerSelections={currentRound.playerSelections || {}}
                 userId={userId}
                 players={gameState.players || []}

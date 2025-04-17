@@ -3272,7 +3272,7 @@ export default function DashboardPage() {
               </div>
             </div>
             
-            <div className="pt-16 px-2">
+            <div className="pt-12 px-2">
               {/* Initial selection screen */}
               {!battleMode && (
                 <div className="flex flex-col gap-6">
@@ -3280,10 +3280,13 @@ export default function DashboardPage() {
                     <img
                       src="/tutorial.png"               // whatever artwork you want
                       alt="How to play"
-                      className="w-72 mx-auto rounded-md border-2 border-cyan-500 shadow"
+                      className="w-144 mx-auto rounded-md border-2 border-cyan-500 shadow"
                     />
+                  <p className="text-lg leading-tight text-gray-200">
+                    <strong>How to play?</strong><br/>
+                  </p>
                   <p className="text-sm leading-tight text-gray-200">
-                    &nbsp;Pick the <strong>correct genres</strong> for the track.<br/>
+                    &nbsp;Double click <strong>correct genres</strong> for the track.<br/>
                     &nbsp;There&apos;re <strong>players&nbsp;*&nbsp;correct options</strong> picks in total.<br/>
                     &nbsp;Be quick—once a genre&apos;s taken it&apos;s gone!
                   </p>

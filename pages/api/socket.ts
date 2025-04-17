@@ -30,10 +30,16 @@ interface ServerToClientEvents {
   'error': (data: { message: string }) => void;
 }
 
+interface SelectGenreAckData {
+  status: "success" | "fail";
+  playerSelections?: Record<string, string[]>;
+  message?: string;
+}
+
 interface ClientToServerEvents {
   'create-room': (data: CreateRoomData) => void;
   'join-room': (data: JoinRoomData) => void;
-  'select-genre': (data: { option: string }) => void;
+  'select-genre': (data: { option: string }, callback: (response: SelectGenreAckData) => void ) => void;
   'evaluate-round': () => void;
   'next-round': () => void;
   'start-game': () => void;
@@ -416,146 +422,122 @@ export default async function SocketHandler(
     });
     
     // Select genre handler
-    socket.on('select-genre', async (data: { option: string }) => {
+    socket.on('select-genre', async (data: { option: string }, ack: (response: SelectGenreAckData) => void) => {
       try {
-        const { option } = data;
-        const { userId, roomCode } = socket.data;
-        
-        if (!userId || !roomCode) {
-          socket.emit('error', { message: 'Not in a room' });
-          return;
-        }
-        
-        console.log(`User ${userId} selecting genre ${option} in room ${roomCode}`);
-        
-        // Encode email to avoid issues with dots in Map keys
-        const encodedUserId = encodeEmail(userId);
-        
-        await connectToDatabase();
-        
-        // Get the current room document
-        const roomDoc = await BattleRoom.findOne({ code: roomCode }) as (Document & IBattleRoom) | null;
-        if (!roomDoc || roomDoc.status !== 'round_in_progress') {
-          socket.emit('error', { message: 'Invalid room state' });
-          return;
-        }
-        
-        const currentRoundIndex = roomDoc.currentRound;
-        const currentRound = roomDoc.rounds[currentRoundIndex];
-        if (!currentRound || currentRound.status !== 'selecting') {
-          socket.emit('error', { message: 'Round not in selecting state' });
-          return;
-        }
-        
-        // Initialize if not exists
-        if (!currentRound.playerSelections) {
-          currentRound.playerSelections = new Map<string, string[]>();
-        }
-        
-        // Get current selections using encoded key
-        const currentPlayerSelections = currentRound.playerSelections.get(encodedUserId) || [];        
-
-        // If already selected by current player, don't do anything (no toggling)
-        if (currentPlayerSelections.includes(option)) {
-          return;
-        }
-        
-        // Add selection
-        const updatedSelections = [...currentPlayerSelections, option];
-
-        // Check if player has reached max selections
-        const maxSelections = currentRound.correctAnswers.length;
-        if (updatedSelections.length > maxSelections) {
-          socket.emit('error', { message: `Maximum selections reached (${maxSelections})` });
-          return;
-        }
-        
-        // Set with encoded key
-        currentRound.playerSelections.set(encodedUserId, updatedSelections);
-        
-        // Tell Mongoose the Map has been modified
-        roomDoc.markModified(`rounds.${currentRoundIndex}.playerSelections`);
-        
-        // Save the entire document
-        await roomDoc.save();
-        
-        // Re-fetch to ensure we have the latest state
-        const updatedRoom = await BattleRoom.findOne({ code: roomCode }) as (Document & IBattleRoom) | null;
-        if (!updatedRoom) {
-          socket.emit('error', { message: 'Room not found after update' });
-          return;
-        }
-        
-        const updatedRound = updatedRoom.rounds[currentRoundIndex];
-        
-        // Create an object from the Map for emitting to clients
-        const playerSelectionsObject: Record<string, string[]> = {};
-        for (const [encodedKey, value] of updatedRound.playerSelections!.entries()) {
-          const originalKey = decodeEmail(encodedKey);
-          playerSelectionsObject[originalKey] = value;
-        }
-        
-        // Track selections for all players
-        const playerSelectionCounts: Record<string, number> = {};
-        const optionsPerPlayer = updatedRound.correctAnswers.length;
-        
-        // Get all player IDs
-        const realPlayerIds = updatedRoom.players.map(p => p.userId);
-        
-        // For each player, count their selections from the Map
-        for (const playerId of realPlayerIds) {
-          const encodedId = encodeEmail(playerId);
-          const playerSelectionsArray = updatedRound.playerSelections?.get(encodedId) || [];
-          const selectionCount = playerSelectionsArray.length;
-          playerSelectionCounts[playerId] = selectionCount;
-        }
-        
-        // Send updates to all clients
-        socket.emit('selections-updated', {
-          playerSelections: playerSelectionsObject,
-          player: userId,
-          option,
-          status: 'success',
-          playerSelectionCounts,
-          optionsPerPlayer
-        });
-
-        socket.to(roomCode).emit('selections-updated', {
-          playerSelections: playerSelectionsObject,
-          player: userId,
-          option,
-          status:'success',
-          playerSelectionCounts,
-          optionsPerPlayer
-        });
-        
-        // Check if round is ready for evaluation
-        const isReadyForEvaluation = realPlayerIds.every((playerId:string) => {
-          const encodedId = encodeEmail(playerId);
-          const playerSelectionsArray = updatedRound.playerSelections?.get(encodedId) || [];
-          const requiredSelections = currentRound.correctAnswers.length;
-          
-          console.log(`Player ${playerId} has ${playerSelectionsArray.length}/${requiredSelections} selections`);
-          
-          // Player needs to have selected the required number of options
-          return playerSelectionsArray.length >= requiredSelections;
-        });
-        
-        console.log(`Is round ready for evaluation: ${isReadyForEvaluation}`);
-        
-        // If round is complete, notify clients
-        if (isReadyForEvaluation) {
-          io.to(roomCode).emit('round-complete');
-        }
+          const { option } = data;
+          const { userId, roomCode } = socket.data;
+  
+          if (!userId || !roomCode) {
+              if (ack) ack({ status: 'fail', message: 'Not in a room' });
+              socket.emit('error', { message: 'Not in a room' });
+              return;
+          }
+  
+          console.log(`User ${userId} attempting to select genre ${option} in room ${roomCode}`);
+          const encodedUserId = encodeEmail(userId);
+  
+          await connectToDatabase();
+          const roomDoc = await BattleRoom.findOne({ code: roomCode }) as (Document & IBattleRoom) | null;
+  
+          if (!roomDoc || roomDoc.status !== 'round_in_progress') {
+              if (ack) ack({ status: 'fail', message: 'Invalid room state' });
+              return;
+          }
+  
+          const currentRoundIndex = roomDoc.currentRound;
+          const currentRound = roomDoc.rounds[currentRoundIndex];
+          if (!currentRound || currentRound.status !== 'selecting') {
+              if (ack) ack({ status: 'fail', message: 'Round not in selecting state' });
+              return;
+          }
+  
+          if (!currentRound.playerSelections) {
+              currentRound.playerSelections = new Map<string, string[]>();
+          }
+  
+          const currentPlayerSelections = currentRound.playerSelections.get(encodedUserId) || [];
+  
+          if (currentPlayerSelections.includes(option)) {
+              const currentSelectionsObject: Record<string, string[]> = {};
+              for (const [encodedKey, value] of currentRound.playerSelections.entries()) {
+                  currentSelectionsObject[decodeEmail(encodedKey)] = value;
+              }
+              // Acknowledge success as the desired state (option selected) is already true for this user.
+              if (ack) ack({ status: 'success', playerSelections: currentSelectionsObject });
+              return;
+          }
+  
+          const maxSelections = currentRound.correctAnswers.length;
+          if (currentPlayerSelections.length >= maxSelections) {
+              if (ack) ack({ status: 'fail', message: `Maximum selections reached (${maxSelections})` });
+              return;
+          }
+  
+          const updatedSelections = [...currentPlayerSelections, option];
+          currentRound.playerSelections.set(encodedUserId, updatedSelections);
+          roomDoc.markModified(`rounds.${currentRoundIndex}.playerSelections`);
+          await roomDoc.save();
+  
+          // Fetch the latest state after saving to ensure consistency
+          const updatedRoom = await BattleRoom.findOne({ code: roomCode }) as (Document & IBattleRoom) | null;
+          if (!updatedRoom) {
+             // This is unlikely but handle it defensively
+             console.error(`Room ${roomCode} not found immediately after saving selection for user ${userId}`);
+             if (ack) ack({ status: 'fail', message: 'Room data inconsistent after save' });
+             return;
+          }
+          const confirmedRound = updatedRoom.rounds[currentRoundIndex];
+          const confirmedSelectionsMap = confirmedRound.playerSelections || new Map<string, string[]>();
+  
+          const playerSelectionsObject: Record<string, string[]> = {};
+          const playerSelectionCounts: Record<string, number> = {};
+          const optionsPerPlayer = confirmedRound.correctAnswers.length;
+          const realPlayerIds = updatedRoom.players.map(p => p.userId);
+  
+          for (const [encodedKey, value] of confirmedSelectionsMap.entries()) {
+              const originalKey = decodeEmail(encodedKey);
+              playerSelectionsObject[originalKey] = value;
+          }
+  
+          for (const playerId of realPlayerIds) {
+              const encodedId = encodeEmail(playerId);
+              const count = confirmedSelectionsMap.get(encodedId)?.length || 0;
+              playerSelectionCounts[playerId] = count;
+          }
+  
+          // Acknowledge success to the requesting client
+          if (ack) ack({ status: 'success', playerSelections: playerSelectionsObject });
+  
+          // Broadcast the updated state to all clients in the room
+          io.to(roomCode).emit('selections-updated', {
+              playerSelections: playerSelectionsObject,
+              player: userId,
+              option: option,
+              status: 'success',
+              playerSelectionCounts,
+              optionsPerPlayer
+          });
+  
+          // Check if the round is now complete
+          const isReadyForEvaluation = realPlayerIds.every((playerId: string) => {
+              const encodedId = encodeEmail(playerId);
+              return (confirmedSelectionsMap.get(encodedId)?.length || 0) >= optionsPerPlayer;
+          });
+  
+          console.log(`Is round ready for evaluation after ${userId} selected ${option}: ${isReadyForEvaluation}`);
+          if (isReadyForEvaluation) {
+              io.to(roomCode).emit('round-complete');
+          }
+  
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        console.error('Error selecting genre:', error);
-        socket.emit('error', { message: 'Failed to select genre: ' + errorMessage });
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          console.error('Error selecting genre:', error);
+          // Acknowledge failure on server error
+          if (ack) ack({ status: 'fail', message: 'Server error during selection: ' + errorMessage });
+          // Emit general error for logging/debugging
+          socket.emit('error', { message: 'Failed to select genre: ' + errorMessage });
       }
-    });
-
-
-
+  });
 
     socket.on('player-ready', async (data: { isReady: boolean }) => {
       try {
