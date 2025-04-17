@@ -263,6 +263,10 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
       option,
       action: 'select'
     });
+
+    setSelectedAnswers(prev => [...prev, option]);
+    const revert = () => setSelectedAnswers(prev => prev.filter(p => p !== option));
+    setSelectionInProgress(true);
     
     // Add a timeout to reset selection state if server doesn't respond
     const resetTimeout = setTimeout(() => {
@@ -1528,7 +1532,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
                     {isMyTurn() 
                       ? hasCompletedSelections()
                         ? "Done! Waiting for others to select genres..."
-                        : "Game start! Select genres for this song" 
+                        : "Game start! Double click the right genres" 
                       : roundComplete 
                         ? "All selections complete!" 
                         : "Waiting for players to make selections..."}
@@ -1557,7 +1561,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
                 onSelect={handleOptionSelect}
                 containerWidth={containerDimensions.width}
                 containerHeight={containerDimensions.height}
-                disabled={!isMyTurn() || hasCompletedSelections() || selectionInProgress}
+                disabled={!isMyTurn() || hasCompletedSelections()}
                 playerSelections={currentRound.playerSelections || {}}
                 userId={userId}
                 players={gameState.players || []}

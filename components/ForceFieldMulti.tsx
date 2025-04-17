@@ -146,14 +146,12 @@ const ForceFieldOptions: React.FC<ForceFieldProps> = ({
         // Check if option is valid before processing
         if (!option || typeof option !== 'object') return false;
         
-        // Check if this option is selected by another player
-        const isSelectedByOtherPlayer = Object.entries(playerSelections || {}).some(([playerId, selections]) => {
-          // Only filter if selected by someone else (not the current user)
-          return playerId !== userId && Array.isArray(selections) && selections.includes(option.name || '');
-        });
-        
-        // Keep the option if it's not selected by another player
-        return !isSelectedByOtherPlayer;
+        const grabbed = Object.values(playerSelections || {}).some(sels =>
+          sels.includes(option.name)
+        );
+
+        const iGrabbed = selectedAnswers.includes(option.name);
+        return !(grabbed || iGrabbed);
     })
     .map((option, i) => {
         // IMPORTANT: Add defensive coding to handle undefined name
@@ -266,24 +264,32 @@ const ForceFieldOptions: React.FC<ForceFieldProps> = ({
     // Get the names of options currently in our nodes
     const currentNodeNames = nodesRef.current.map(node => node.name);
     
-    const optionsToAdd = options.filter(option => {
-      const name = option?.name ?? '';
-      if (selectedAnswers.includes(name)) return true;
-      const pickedBySomeoneElse = Object.entries(playerSelections || {})
-      .some(([playerId, selections]) =>
-       playerId !== userId && selections.includes(name)
-      );
-     return !pickedBySomeoneElse;
+    // const optionsToAdd = options.filter(option => {
+    //   const name = option?.name ?? '';
+    //   if (selectedAnswers.includes(name)) return true;
+    //   const pickedBySomeoneElse = Object.entries(playerSelections || {})
+    //   .some(([playerId, selections]) =>
+    //    playerId !== userId && selections.includes(name)
+    //   );
+    //  return !pickedBySomeoneElse;
+    // });
+
+    const optionsToAdd = options.filter(opt => {
+      const name = opt?.name ?? "";
+    
+      if (currentNodeNames.includes(name)) return false;        // we’ve got it already
+    
+      const grabbed = selectedAnswers.includes(name) ||
+                      Object.values(playerSelections || {}).some(sels => sels.includes(name));
+      
+      return !grabbed;
     });
     
     // Find options that need to be removed (were selected by other players)
-    const nodeNamesToRemove = currentNodeNames.filter(nodeName => {
-      const iPickedIt = selectedAnswers.includes(nodeName);
-      if (iPickedIt) return false;
-      return Object.entries(playerSelections || {}).some(([playerId, selections]) => {
-        return playerId !== userId && selections.includes(nodeName);
-      });
-    });
+    const nodeNamesToRemove = currentNodeNames.filter(name =>
+      selectedAnswers.includes(name) ||
+      Object.values(playerSelections || {}).some(sels => sels.includes(name))
+    );
   
     // If we have nodes to add or remove, update with smooth transition
     if (optionsToAdd.length > 0 || nodeNamesToRemove.length > 0) {
@@ -744,36 +750,36 @@ const ForceFieldOptions: React.FC<ForceFieldProps> = ({
       .attr("stroke-width", d => d.isSelected ? 3 : 1.5)
       .attr("filter", "url(#dropShadow)")
       .attr("cursor", disabled ? "not-allowed" : "pointer")
-      .on("mouseover", function(event, d) {
-        // Skip highlight effect for disabled options
-        if (d.disabled || disabled) return;
+      // .on("mouseover", function(event, d) {
+      //   // Skip highlight effect for disabled options
+      //   if (d.disabled || disabled) return;
         
-        // Highlight effect
-        d3.select(this)
-          .transition()
-          .duration(200)
-          .attr("stroke", "#FFFFFF")
-          .attr("stroke-width", 3);
+      //   // Highlight effect
+      //   d3.select(this)
+      //     .transition()
+      //     .duration(200)
+      //     .attr("stroke", "#FFFFFF")
+      //     .attr("stroke-width", 3);
           
-        // Show tooltip with delay
-        showTooltipWithDelay(event as MouseEvent, d as NodeDatum);
-      })
-      .on("mouseout", function(event, d) {
-        // Skip for disabled options
-        if (d.disabled || disabled) return;
+      //   // Show tooltip with delay
+      //   showTooltipWithDelay(event as MouseEvent, d as NodeDatum);
+      // })
+      // .on("mouseout", function(event, d) {
+      //   // Skip for disabled options
+      //   if (d.disabled || disabled) return;
         
-        // Remove highlight effect
-        d3.select(this)
-          .transition()
-          .duration(200)
-          .attr("stroke", (d as NodeDatum).selectedByCurrentUser ? '#FFFFFF' : 
-                 (d as NodeDatum).isSelected ? (d as NodeDatum).playerColor || '#FFFFFF' : 
-                 'rgba(255, 255, 255, 0.3)')
-          .attr("stroke-width", (d as NodeDatum).isSelected ? 3 : 1.5);
+      //   // Remove highlight effect
+      //   d3.select(this)
+      //     .transition()
+      //     .duration(200)
+      //     .attr("stroke", (d as NodeDatum).selectedByCurrentUser ? '#FFFFFF' : 
+      //            (d as NodeDatum).isSelected ? (d as NodeDatum).playerColor || '#FFFFFF' : 
+      //            'rgba(255, 255, 255, 0.3)')
+      //     .attr("stroke-width", (d as NodeDatum).isSelected ? 3 : 1.5);
           
-        // Hide tooltip
-        hideTooltip();
-      })
+      //   // Hide tooltip
+      //   hideTooltip();
+      // })
       .on("click", (event, d) => {
         // Skip clicks for disabled options or when the whole component is disabled
         if (d.disabled || disabled) return;

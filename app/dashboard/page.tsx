@@ -115,6 +115,7 @@ export default function DashboardPage() {
   const [songDetails, setSongDetails] = useState<SongDetails | null>(null);
   const [showLeaderboard, setShowLeaderboard] = useState(true);
   const [showExplore, setShowExplore] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
 
   const [comments, setComments] = useState<CommentData[]>([]);
   const [newComment, setNewComment] = useState("");
@@ -3089,6 +3090,7 @@ export default function DashboardPage() {
               </div>
             </CardContent>
           </Card>
+
           <Card className="w-64 border-4 border-purple-600 bg-black bg-opacity-80 backdrop-blur-md text-white shadow-lg shadow-purple-500/50 rounded-lg overflow-hidden">
             <CardHeader className="p-2 flex flex-row items-center justify-between">
               <CardTitle className="flex items-center">
@@ -3103,6 +3105,7 @@ export default function DashboardPage() {
                   className="mt-2 bg-gradient-to-r from-red-500 via-purple-600 to-blue-600 hover:from-red-600 hover:via-purple-700 hover:to-blue-700 text-white font-bold border-2 border-white pulsate-button"
                   onClick={(e) => {
                     e.stopPropagation();
+                    setShowTutorial(true);
                     setShowBattleModal(true);
                   }}
                 >
@@ -3113,6 +3116,7 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </div>
+
 
         {/* Explore Panel - Bottom Left */}
         <div className="absolute bottom-4 left-4 space-y-4 z-20">
@@ -3274,7 +3278,18 @@ export default function DashboardPage() {
               {/* Initial selection screen */}
               {!battleMode && (
                 <div className="flex flex-col gap-6">
-                  
+                  <div className="mb-6 space-y-3 text-center">
+                    <img
+                      src="/tutorial.png"               // whatever artwork you want
+                      alt="How to play"
+                      className="w-72 mx-auto rounded-md border-2 border-cyan-500 shadow"
+                    />
+                  <p className="text-sm leading-tight text-gray-200">
+                    &nbsp;Pick the <strong>correct genres</strong> for the track.<br/>
+                    &nbsp;There're <strong>players&nbsp;*&nbsp;correct‑options</strong> picks in total.<br/>
+                    &nbsp;Be quick—once a genre’s taken it’s gone!
+                  </p>
+                </div>
                   <div className="flex flex-col gap-4">
                     <button 
                       className="bg-gradient-to-r from-purple-600 to-blue-700 hover:from-purple-700 hover:to-blue-800 text-white text-xl font-bold py-3 px-4 rounded-md shadow-lg shadow-purple-700/30 flex items-center justify-center"
