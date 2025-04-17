@@ -266,24 +266,20 @@ const ForceFieldOptions: React.FC<ForceFieldProps> = ({
     // Get the names of options currently in our nodes
     const currentNodeNames = nodesRef.current.map(node => node.name);
     
-    // Find options that need to be added (were deselected by other players)
     const optionsToAdd = options.filter(option => {
-      // Check if this option is not currently in our node list
-      if (!currentNodeNames.includes(option.name)) {
-        // Check if it's no longer selected by any other player
-        const isSelectedByOtherPlayer = Object.entries(playerSelections || {}).some(([playerId, selections]) => {
-          return playerId !== userId && selections.includes(option.name);
-        });
-        
-        // Add it if it's not selected by another player
-        return !isSelectedByOtherPlayer;
-      }
-      return false;
+      const name = option?.name ?? '';
+      if (selectedAnswers.includes(name)) return true;
+      const pickedBySomeoneElse = Object.entries(playerSelections || {})
+      .some(([playerId, selections]) =>
+       playerId !== userId && selections.includes(name)
+      );
+     return !pickedBySomeoneElse;
     });
     
     // Find options that need to be removed (were selected by other players)
     const nodeNamesToRemove = currentNodeNames.filter(nodeName => {
-      // Check if this node is now selected by another player
+      const iPickedIt = selectedAnswers.includes(nodeName);
+      if (iPickedIt) return false;
       return Object.entries(playerSelections || {}).some(([playerId, selections]) => {
         return playerId !== userId && selections.includes(nodeName);
       });

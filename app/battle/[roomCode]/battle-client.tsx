@@ -669,13 +669,13 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
             return { ...prev, rounds: updatedRounds };
           });
           
-          // Update local selected answers state for the current user
-          if (data.player === userId) {
+          // Only update local selected answers state if this was a success for the current user
+          if (data.player === userId && (data.status === 'success' || !data.status)) {
             const userSelections = data.playerSelections[userId] || [];
             console.log('Updating current user selections:', userSelections);
             setSelectedAnswers(userSelections);
           }
-        });        
+        });   
           
         // Round complete handler
         socket.on('round-complete', () => {
