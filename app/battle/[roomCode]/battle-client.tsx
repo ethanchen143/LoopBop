@@ -203,8 +203,6 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
   const [nextRoundClicked, setNextRoundClicked] = useState(false);
   const [currentPlayerReady, setCurrentPlayerReady] = useState(false); // Track current player's ready status
 
-  
-  
   // just to satisfy eslint
   console.log(showRoundResults);
   console.log(nextRoundClicked);
@@ -219,11 +217,21 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
   // Keep track of the current view
   const [currentView, setCurrentView] = useState("loading");
 
-  const clickAudioRef    = useRef<HTMLAudioElement>(new Audio('/sounds/click.mp3'));
-  const roundStartAudioRef = useRef<HTMLAudioElement>(new Audio('/sounds/round-start.mp3'));
-  const roundResultAudioRef = useRef<HTMLAudioElement>(new Audio('/sounds/round-result.mp3'));
-  const finalAudioRef = useRef<HTMLAudioElement>(new Audio('/sounds/finally.wav'));
-  const readyAudioRef = useRef<HTMLAudioElement>(new Audio('/sounds/ready-click.wav'));
+  const clickAudioRef = useRef<HTMLAudioElement | null>(null);
+  const roundStartAudioRef = useRef<HTMLAudioElement | null>(null);
+  const roundResultAudioRef = useRef<HTMLAudioElement | null>(null);
+  const finalAudioRef = useRef<HTMLAudioElement | null>(null);
+  const readyAudioRef = useRef<HTMLAudioElement | null>(null);
+  
+  useEffect(() => {
+    if (typeof window !== "undefined" && typeof Audio !== "undefined") {
+      clickAudioRef.current = new Audio('/sounds/click.mp3');
+      roundStartAudioRef.current = new Audio('/sounds/round-start.mp3');
+      roundResultAudioRef.current = new Audio('/sounds/round-result.mp3');
+      finalAudioRef.current = new Audio('/sounds/finally.wav');
+      readyAudioRef.current = new Audio('/sounds/ready-click.wav');
+    }
+  }, []);
   
   // Get current round info from game state
   const currentRound = gameState?.rounds?.[gameState.currentRound || 0];  
@@ -237,7 +245,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
 
   const handleOptionSelect = useCallback(
     (option: string) => {
-      clickAudioRef.current.play();  
+      clickAudioRef.current?.play();  
       if (!socketRef.current) {
         console.error("Socket not connected");
         return;
@@ -657,7 +665,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
         
         // New round handler
         socket.on('new-round', (data) => {
-          roundStartAudioRef.current.play();
+          roundStartAudioRef.current?.play();
           if (window.nextRoundTimeout) {
             clearTimeout(window.nextRoundTimeout);
             window.nextRoundTimeout = undefined;
@@ -767,7 +775,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
         
         // Round evaluated handler
         socket.on('round-evaluated', (data) => {
-          roundResultAudioRef.current.play();
+          roundResultAudioRef.current?.play();
           console.log('Round evaluated event received:', data);
           
           const isHost = (data.players || []).some((p:Player) => p.id === userIdValue && p.isCreator);
@@ -822,7 +830,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
         
         // Game over handler
         socket.on('game-over', (data) => {
-          finalAudioRef.current.play();
+          finalAudioRef.current?.play();
           console.log('Game over event received:', data);
           
           setGameState(prev => {
@@ -950,7 +958,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
   
   // Handle player ready status
   const handleReadyToggle = () => {
-    readyAudioRef.current.play()
+    readyAudioRef.current?.play()
     if (!socketRef.current || !userId) {
       console.warn('Cannot set ready status: socket not connected or user ID not available');
       return;

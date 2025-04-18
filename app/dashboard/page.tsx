@@ -145,13 +145,12 @@ export default function DashboardPage() {
   const ALBUM_VIEW_TARGET_POSITION = new THREE.Vector3(0, 15, 30);
   const YOUTUBE_CAMERA_POSITION = new THREE.Vector3(0, 15, 30);
 
-  const selectAudioRef = useRef<HTMLAudioElement>(new Audio('/sounds/general.wav'));
-  
-  // Window reference for animations
+  const selectAudioRef = useRef<HTMLAudioElement | null>(null);
+
   useEffect(() => {
-    // this does nothing, just to satisfy unused variable requirement
-    if (typeof window !== 'undefined' && !window.floatingAnimations) {
-      window.floatingAnimations = [];
+    // only run in a browser, after mount
+    if (typeof window !== "undefined" && typeof Audio !== "undefined") {
+      selectAudioRef.current = new Audio("/sounds/general.wav");
     }
   }, []);
 
@@ -2594,7 +2593,7 @@ export default function DashboardPage() {
         const userData = object.userData;
         
         if (userData) {
-          selectAudioRef.current.play();
+          selectAudioRef.current?.play();
           console.log("Clicked object:", userData);
           
           // Handle different object types
@@ -2815,7 +2814,7 @@ export default function DashboardPage() {
   }, []);
 
   const handleCreateGame = async () => {
-    selectAudioRef.current.play();
+    selectAudioRef.current?.play();
     setIsLoading(true);
     setError(""); // Clear any previous errors
     
@@ -2876,7 +2875,7 @@ export default function DashboardPage() {
 
   // Similarly update the handleJoinGame function
   const handleJoinGame = async () => {
-    selectAudioRef.current.play();
+    selectAudioRef.current?.play();
     if (!joinCode.trim()) {
       setError("Please enter a room code");
       return;
@@ -3086,7 +3085,7 @@ export default function DashboardPage() {
                   size="sm"
                   className="mt-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-bold border-2 border-white pulsate-button"
                   onClick={(e) => {
-                    selectAudioRef.current.play();
+                    selectAudioRef.current?.play();
                     e.stopPropagation();
                     router.push(`/practice`);
                   }}
@@ -3110,7 +3109,7 @@ export default function DashboardPage() {
                   size="sm"
                   className="mt-2 bg-gradient-to-r from-red-500 via-purple-600 to-blue-600 hover:from-red-600 hover:via-purple-700 hover:to-blue-700 text-white font-bold border-2 border-white pulsate-button"
                   onClick={(e) => {
-                    selectAudioRef.current.play();
+                    selectAudioRef.current?.play();
                     e.stopPropagation();
                     setShowBattleModal(true);
                   }}
@@ -3303,7 +3302,7 @@ export default function DashboardPage() {
                     <button 
                       className="bg-gradient-to-r from-purple-600 to-blue-700 hover:from-purple-700 hover:to-blue-800 text-white text-xl font-bold py-3 px-4 rounded-md shadow-lg shadow-purple-700/30 flex items-center justify-center"
                       onClick={() => 
-                        {selectAudioRef.current.play();
+                        {selectAudioRef.current?.play();
                         setBattleMode("create");}
                       }
                     >
@@ -3313,7 +3312,7 @@ export default function DashboardPage() {
                     <button 
                       className="bg-gradient-to-r from-pink-600 to-purple-700 hover:from-pink-700 hover:to-purple-800 text-white text-xl font-bold py-3 px-4 rounded-md shadow-lg shadow-pink-700/30 flex items-center justify-center"
                       onClick={() => 
-                        {selectAudioRef.current.play();
+                        {selectAudioRef.current?.play();
                          setBattleMode("join");
                         }
                         }

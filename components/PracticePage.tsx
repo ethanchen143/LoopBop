@@ -271,9 +271,18 @@ export default function PracticePage() {
   const [userData, setUserData] = useState<UserData | null>(null); // New state for user data
   const [showGradingDetails, setShowGradingDetails] = useState(false); // For collapsible grading explanation
   
-  const clickAudioRef    = useRef<HTMLAudioElement>(new Audio('/sounds/click.mp3'));
-  const roundStartAudioRef = useRef<HTMLAudioElement>(new Audio('/sounds/round-start.mp3'));
-  const roundResultAudioRef = useRef<HTMLAudioElement>(new Audio('/sounds/round-result.mp3'));
+  const clickAudioRef    = useRef<HTMLAudioElement | null>(null);
+  const roundStartAudioRef = useRef<HTMLAudioElement | null>(null);
+  const roundResultAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    // only run in a browser, after mount
+    if (typeof window !== "undefined" && typeof Audio !== "undefined") {
+      clickAudioRef.current = new Audio('/sounds/click.mp3');
+      roundStartAudioRef.current = new Audio('/sounds/round-start.mp3');
+      roundResultAudioRef.current = new Audio('/sounds/round-result.mp3');
+    }
+  }, []);
 
   // Container dimensions for force field
   const [containerDimensions, setContainerDimensions] = useState({ width: 800, height: 400 });
@@ -541,7 +550,7 @@ export default function PracticePage() {
 
   // Handle user selecting/deselecting an answer
   const handleAnswerSelect = (answer: string) => {
-    clickAudioRef.current.play();
+    clickAudioRef.current?.play();
     console.log("Answer selected:", answer);
     setSelectedAnswers((prevSelected) => {
       if (prevSelected.includes(answer)) {
@@ -779,7 +788,7 @@ export default function PracticePage() {
   // Updated: Check answers using the similarity score API
   const handleSubmitAnswers = async () => {
     try {
-      roundResultAudioRef.current.play();
+      roundResultAudioRef.current?.play();
       const userGenres = selectedAnswers;
       const correctGenreNames = correctAnswers.map(answer => answer.name);
       
@@ -1132,7 +1141,7 @@ export default function PracticePage() {
               <Button
                 className="border-2 border-cyan-500 bg-transparent hover:bg-cyan-900/20 text-gray-300 text-xl font-bold px-6 py-4"
                 onClick={() => {
-                  roundStartAudioRef.current.play();
+                  roundStartAudioRef.current?.play();
                   // Increment combo counter for consecutive practices
                   setCombo(prevCombo => prevCombo + 1);
                   
