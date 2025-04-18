@@ -144,6 +144,8 @@ export default function DashboardPage() {
   const MAIN_VIEW_CAMERA_POSITION = new THREE.Vector3(0, 20, 25);
   const ALBUM_VIEW_TARGET_POSITION = new THREE.Vector3(0, 15, 30);
   const YOUTUBE_CAMERA_POSITION = new THREE.Vector3(0, 15, 30);
+
+  const selectAudioRef = useRef<HTMLAudioElement>(new Audio('/sounds/general.wav'));
   
   // Window reference for animations
   useEffect(() => {
@@ -2573,6 +2575,7 @@ export default function DashboardPage() {
       const intersects = raycaster.intersectObjects(sceneRef.current.children, true);
 
       if (intersects.length > 0) {
+        
         // Find the first object with relevant userData
         const findObjectWithUserData = (object: THREE.Object3D): THREE.Object3D => {
           let current: THREE.Object3D | null = object;
@@ -2591,6 +2594,7 @@ export default function DashboardPage() {
         const userData = object.userData;
         
         if (userData) {
+          selectAudioRef.current.play();
           console.log("Clicked object:", userData);
           
           // Handle different object types
@@ -2811,6 +2815,7 @@ export default function DashboardPage() {
   }, []);
 
   const handleCreateGame = async () => {
+    selectAudioRef.current.play();
     setIsLoading(true);
     setError(""); // Clear any previous errors
     
@@ -2871,6 +2876,7 @@ export default function DashboardPage() {
 
   // Similarly update the handleJoinGame function
   const handleJoinGame = async () => {
+    selectAudioRef.current.play();
     if (!joinCode.trim()) {
       setError("Please enter a room code");
       return;
@@ -3080,6 +3086,7 @@ export default function DashboardPage() {
                   size="sm"
                   className="mt-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-bold border-2 border-white pulsate-button"
                   onClick={(e) => {
+                    selectAudioRef.current.play();
                     e.stopPropagation();
                     router.push(`/practice`);
                   }}
@@ -3103,6 +3110,7 @@ export default function DashboardPage() {
                   size="sm"
                   className="mt-2 bg-gradient-to-r from-red-500 via-purple-600 to-blue-600 hover:from-red-600 hover:via-purple-700 hover:to-blue-700 text-white font-bold border-2 border-white pulsate-button"
                   onClick={(e) => {
+                    selectAudioRef.current.play();
                     e.stopPropagation();
                     setShowBattleModal(true);
                   }}
@@ -3294,14 +3302,21 @@ export default function DashboardPage() {
                   <div className="flex flex-col gap-4">
                     <button 
                       className="bg-gradient-to-r from-purple-600 to-blue-700 hover:from-purple-700 hover:to-blue-800 text-white text-xl font-bold py-3 px-4 rounded-md shadow-lg shadow-purple-700/30 flex items-center justify-center"
-                      onClick={() => setBattleMode("create")}
+                      onClick={() => 
+                        {selectAudioRef.current.play();
+                        setBattleMode("create");}
+                      }
                     >
                       Create Game
                     </button>
                     
                     <button 
                       className="bg-gradient-to-r from-pink-600 to-purple-700 hover:from-pink-700 hover:to-purple-800 text-white text-xl font-bold py-3 px-4 rounded-md shadow-lg shadow-pink-700/30 flex items-center justify-center"
-                      onClick={() => setBattleMode("join")}
+                      onClick={() => 
+                        {selectAudioRef.current.play();
+                         setBattleMode("join");
+                        }
+                        }
                     >
                       Join Game
                     </button>
@@ -3494,7 +3509,7 @@ export default function DashboardPage() {
                             Starting...
                           </span>
                         ) : (
-                          "START BATTLE"
+                          "START"
                         )}
                       </button>
                     )}

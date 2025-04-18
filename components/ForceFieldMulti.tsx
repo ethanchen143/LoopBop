@@ -453,7 +453,7 @@ const ForceFieldOptions: React.FC<ForceFieldProps> = ({
         .style("display", (d) => d.selectedByCurrentUser ? "block" : "none")
         .attr("stroke", (d) => d.playerColor || '#FFFFFF');
     }
-  }, [selectedAnswers, initialized, playerSelections, players, disabled, userId, options, containerWidth, containerHeight]);
+  }, [options, selectedAnswers, containerWidth, containerHeight, userId, players]);
     
   // Function to update node gradient definitions
   const updateNodeGradient = (nodeIndex: number, nodeData: NodeDatum) => {
@@ -535,7 +535,7 @@ const ForceFieldOptions: React.FC<ForceFieldProps> = ({
   //   }, 1500); // 1.5 seconds delay
   // };
   
-  
+
   // Function to hide tooltip and clear timeout
   // const hideTooltip = () => {
   //   if (tooltipTimeoutRef.current) {

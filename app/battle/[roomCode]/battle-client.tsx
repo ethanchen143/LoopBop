@@ -218,6 +218,12 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
   
   // Keep track of the current view
   const [currentView, setCurrentView] = useState("loading");
+
+  const clickAudioRef    = useRef<HTMLAudioElement>(new Audio('/sounds/click.mp3'));
+  const roundStartAudioRef = useRef<HTMLAudioElement>(new Audio('/sounds/round-start.mp3'));
+  const roundResultAudioRef = useRef<HTMLAudioElement>(new Audio('/sounds/round-result.mp3'));
+  const finalAudioRef = useRef<HTMLAudioElement>(new Audio('/sounds/finally.wav'));
+  const readyAudioRef = useRef<HTMLAudioElement>(new Audio('/sounds/ready-click.wav'));
   
   // Get current round info from game state
   const currentRound = gameState?.rounds?.[gameState.currentRound || 0];  
@@ -231,6 +237,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
 
   const handleOptionSelect = useCallback(
     (option: string) => {
+      clickAudioRef.current.play();  
       if (!socketRef.current) {
         console.error("Socket not connected");
         return;
@@ -650,6 +657,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
         
         // New round handler
         socket.on('new-round', (data) => {
+          roundStartAudioRef.current.play();
           if (window.nextRoundTimeout) {
             clearTimeout(window.nextRoundTimeout);
             window.nextRoundTimeout = undefined;
@@ -759,6 +767,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
         
         // Round evaluated handler
         socket.on('round-evaluated', (data) => {
+          roundResultAudioRef.current.play();
           console.log('Round evaluated event received:', data);
           
           const isHost = (data.players || []).some((p:Player) => p.id === userIdValue && p.isCreator);
@@ -813,6 +822,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
         
         // Game over handler
         socket.on('game-over', (data) => {
+          finalAudioRef.current.play();
           console.log('Game over event received:', data);
           
           setGameState(prev => {
@@ -940,6 +950,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
   
   // Handle player ready status
   const handleReadyToggle = () => {
+    readyAudioRef.current.play()
     if (!socketRef.current || !userId) {
       console.warn('Cannot set ready status: socket not connected or user ID not available');
       return;
@@ -1444,6 +1455,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
   if (currentView === "playing") {
     // Calculate required selections
     const maxSelectionsAllowed = optionsPerPlayer();
+    const mySelections = currentRound?.playerSelections?.[userId] || [];
     
     return (
       <div className="relative min-h-screen bg-black text-white overflow-hidden">
@@ -1603,7 +1615,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
                 
                 {/* Original arcade scoreboard */}
                 <ArcadeScoreboard 
-                  selected={selectedAnswers.length} 
+                  selected={mySelections.length} 
                   total={maxSelectionsAllowed} 
                 />
               </div>
@@ -1623,7 +1635,7 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
                 onSelect={handleOptionSelect}
                 containerWidth={containerDimensions.width}
                 containerHeight={containerDimensions.height}
-                disabled={!isMyTurn() || (selectedAnswers.length + optimisticallySelected.length >= optionsPerPlayer())}
+                disabled={!isMyTurn() || (mySelections.length >= maxSelectionsAllowed)}
                 playerSelections={currentRound.playerSelections || {}}
                 userId={userId}
                 players={gameState.players || []}
