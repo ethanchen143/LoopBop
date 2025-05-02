@@ -70,12 +70,12 @@ export default function LandingPage() {
             <div className="flex flex-col items-center max-w-3xl mx-auto text-center space-y-10">
               <div>
                 <h1 className="min-h-[76px] text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-cyan-400 to-pink-500 animate-pulse-slow leading-relaxed">
-                  pop music, gamified.
+                  pop music, gamified!
                 </h1>
               </div>
-              <p className="text-xl md:text-2xl text-gray-300 max-w-2xl">
+              {/* <p className="text-xl md:text-2xl text-gray-300 max-w-2xl">
                 Pop Loops, Fun Scoops!
-              </p>
+              </p> */}
               
               <div className="flex flex-col sm:flex-row gap-4 w-full justify-center">
                 <Button 
@@ -93,15 +93,15 @@ export default function LandingPage() {
         <section className="py-16 relative from-black to-indigo-900/30">
           <div className="container mx-auto px-4 md:px-6 text-center">
             <h2 className="text-3xl font-bold mb-12 text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-pink-500">
-              JOIN THE LOOPBOP COMMUNITY
+              Join the Community
             </h2>
             
             <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
               {[
                 { count: "100+", label: "ACTIVE USERS" },
-                { count: "100+", label: "ARTISTS" },
-                { count: "100+", label: "MUSIC GENRES" },
-                { count: "100+", label: "SONGS" }
+                { count: "10000+", label: "ARTISTS" },
+                { count: "100", label: "MUSIC GENRES" },
+                { count: "10000+", label: "SONGS" }
               ].map((stat, index) => (
                 <div key={index} className="flex flex-col items-center">
                   <span className="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-cyan-400">
@@ -206,14 +206,14 @@ export default function LandingPage() {
             </section>
             
             <section>
-              <h3 className="text-2xl font-bold text-cyan-400 mb-4">Our Team</h3>
+              <h3 className="text-2xl font-bold text-cyan-400 mb-4">Creator</h3>
               <p className="text-gray-300">
-                LoopBop was founded by a team of passionate music lovers, game designers, and educators who wanted to create a new way to experience and learn about pop music. Our diverse team brings together expertise in music theory, game development, and interactive education.
+                LoopBop was founded Ethan Chen. (https://blue-mirror.com/)
               </p>
             </section>
             
             <section>
-              <h3 className="text-2xl font-bold text-pink-500 mb-4">Join Us</h3>
+              <h3 className="text-2xl font-bold text-pink-500 mb-4">Try it Out</h3>
               <p className="text-gray-300 mb-6">
                 Start your pop music journey today and dive into our immersive 3D pop verse. Discover new genres, artists, songs, and much more!
               </p>

@@ -756,9 +756,9 @@ export default function DashboardPage() {
       context.font = 'bold 40px Impact';
       context.strokeStyle = 'rgba(0, 0, 0, 0.7)';
       context.lineWidth = 6;
-      context.strokeText("FAMILY", 256, 240);
+      context.strokeText("Main Genre", 256, 240);
       context.fillStyle = 'rgba(255, 255, 255, 0.85)';
-      context.fillText("FAMILY", 256, 240);
+      context.fillText("Main Genre", 256, 240);
           
       const texture = new THREE.CanvasTexture(canvas);
       
@@ -3237,26 +3237,27 @@ export default function DashboardPage() {
       </main>
   
       {/* Instructions Modal */}
-      <div className="fixed inset-0 flex items-center justify-center z-40 pointer-events-none">
-        <div className="bg-black bg-opacity-70 backdrop-blur-md p-8 rounded-xl border-4 border-pink-500 text-white max-w-md text-center animate-fade-out shadow-xl shadow-pink-500/30">
-          <h2 className="text-3xl font-bold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-cyan-400 to-pink-500">Welcome to Bop-Verse!</h2>
-          <p className="text-cyan-400 mb-6">Use your mouse to navigate: drag to rotate, scroll to zoom.</p>
-          <div className="flex justify-center space-x-6">
+      {/* <div className="fixed inset-0 flex items-center justify-center z-40 pointer-events-none">
+        <div className="bg-black bg-opacity-70 backdrop-blur-md p-6 rounded-lg border-4 border-pink-500 text-white max-w-sm text-center animate-fade-out-fast shadow-lg shadow-pink-500/30">
+          <h2 className="text-2xl font-bold mb-3 text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-cyan-400 to-pink-500">Welcome to Bop-Verse!</h2>
+          <p className="text-cyan-400 mb-5 text-sm">Use your mouse to navigate: drag to rotate, scroll to zoom.</p>
+          <div className="flex justify-center space-x-5">
             <div className="text-center">
-              <div className="w-14 h-14 mx-auto bg-gradient-to-br from-pink-500 to-purple-600 rounded-full flex items-center justify-center mb-2 border-2 border-white">
-                <span className="text-2xl font-bold">1</span>
+              <div className="w-12 h-12 mx-auto bg-gradient-to-br from-pink-500 to-purple-600 rounded-full flex items-center justify-center mb-1.5 border-2 border-white">
+                <span className="text-xl font-bold">1</span>
               </div>
-              <p className="text-sm font-bold text-pink-500">Select a genre to view related songs</p>
+              <p className="text-xs font-bold text-pink-500">Select a genre to view related songs</p>
             </div>
             <div className="text-center">
-              <div className="w-14 h-14 mx-auto bg-gradient-to-br from-yellow-400 to-amber-600 rounded-full flex items-center justify-center mb-2 border-2 border-white">
-                <span className="text-2xl font-bold">2</span>
+              <div className="w-12 h-12 mx-auto bg-gradient-to-br from-yellow-400 to-amber-600 rounded-full flex items-center justify-center mb-1.5 border-2 border-white">
+                <span className="text-xl font-bold">2</span>
               </div>
-              <p className="text-sm font-bold text-yellow-400">Select a song to view related genres</p>
+              <p className="text-xs font-bold text-yellow-400">Select a song to view related genres</p>
             </div>
           </div>
         </div>
-      </div>
+      </div> */}
+
 
       {/* Battle Mode Modal */}
       {showBattleModal && (

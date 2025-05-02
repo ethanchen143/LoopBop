@@ -11,8 +11,9 @@ export async function GET(request: NextRequest) {
     const songQuery = songTitle
       ? `
         MATCH (s:Song {title: $title})
+        WHERE s.explanation IS NOT NULL AND trim(s.explanation) <> ""
         MATCH (artist:Artist)-[:MAKES]->(s)-[:BELONGS_TO]->(album:Album)
-        RETURN 
+        RETURN
           s.title AS name, 
           s.youtube_link AS youtube,
           s.explanation AS explanation,
@@ -21,6 +22,7 @@ export async function GET(request: NextRequest) {
       `
       : `
         MATCH (s:Song)
+        WHERE s.explanation IS NOT NULL AND trim(s.explanation) <> ""
         MATCH (artist:Artist)-[:MAKES]->(s)-[:BELONGS_TO]->(album:Album)
         RETURN 
           s.title AS name, 
@@ -44,11 +46,9 @@ export async function GET(request: NextRequest) {
 
     // Query to fetch all tags associated with the selected song
     const songTagsQuery = `
-      MATCH (s:Song {title: $songName})-[:Genre]->(g:Genre)
-      MATCH (s)-[:Era]->(e:Era)
-      RETURN 
-        collect(DISTINCT {name: g.tag, family: g.family, description: COALESCE(g.description, "No description available")}) AS genres, 
-        collect(DISTINCT {name: e.tag, description: COALESCE(e.description, "No description available")}) AS eras
+    MATCH (s:Song {title: $songName})-[:Genre]->(g:Genre)
+    RETURN 
+      collect(DISTINCT {name: g.tag, family: g.family, description: COALESCE(g.description, "No description available")}) AS genres
     `;
 
     const songTagsResult = await mainSession.run(songTagsQuery, { songName });
@@ -70,58 +70,51 @@ export async function GET(request: NextRequest) {
     `;
 
     const genresSession = getSession();
-    const erasSession = getSession();
 
     const [genresResult] = await Promise.all([
       genresSession.run(genreQuery("Genre", "6")),
     ]);
 
     // Close all sessions
-    await Promise.all([erasSession.close(), genresSession.close()]);
+    await Promise.all([genresSession.close()]);
     await mainSession.close();
 
-    interface Record {
-      get: (key: string) => string | null;
-    }
+    // interface Record {
+    //   get: (key: string) => string | null;
+    // }
 
     const formatOptions = (
       result: { records: { get: (key: string) => string }[] },
-      correctAnswers: { name: string; description: string }[]
+      correctAnswers: { name: string; family?: string; description?: string }[]
     ) => {
-      const randomOptions = result.records.map((record: Record) => ({
-        name: record.get("name"),
-        description: record.get("description") || "No description available",
-        family: (() => {
-          try {
-            return record.get("family") || "N/A";
-          } catch {
-            return "N/A";
-          }
-        })()
+      // 1) turn your random DB hits into option objects
+      const randomOptions = result.records.map(rec => ({
+        name: rec.get("name"),
+        description: rec.get("description") || "No description available",
+        family: rec.get("family") || "N/A"
+      }));
+    
+      // 2) map your correct tags (from tagsRecord.get("genres")) into the same shape
+      const correctOptions = correctAnswers.map(ans => ({
+        name: ans.name,
+        description: ans.description || "No description available",
+        family: ans.family || "N/A"
       }));
 
-      const correctOptions = correctAnswers.map(({ name, description }) => ({
-        name,
-        description: description || "No description available",
-        family: (() => {
-          try {
-            return record.get("family") || "N/A";
-          } catch {
-            return "N/A";
-          }
-        })()
-      }));
-
-      // Merge options without duplicates based on `name`
-      return [
-        ...new Map(
-          [...randomOptions, ...correctOptions].map((option) => [
-            option.name,
-            option,
-          ])
-        ).values(),
-      ];
+      console.log("Correct Options:", correctOptions);
+    
+      // 3) combine & dedupe by name, letting correctOptions overwrite any random dupes
+      const combined = [...randomOptions, ...correctOptions];
+      const uniq = new Map<string, typeof combined[0]>();
+      combined.forEach(opt => uniq.set(opt.name, opt));
+      const options = Array.from(uniq.values());
+    
+      // 4) shuffle so the correct ones aren’t always at the end
+      options.sort(() => Math.random() - 0.5);
+    
+      return options;
     };
+    
 
     const genres = tagsRecord.get("genres") || [];
 

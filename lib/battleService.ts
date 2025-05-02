@@ -32,6 +32,7 @@ export async function getBattleData(playerCount: number): Promise<BattleData> {
     // Step 1: Fetch a random song
     const songQuery = `
       MATCH (s:Song)
+      WHERE s.explanation IS NOT NULL AND trim(s.explanation) <> ""
       MATCH (artist:Artist)-[:MAKES]->(s)-[:BELONGS_TO]->(album:Album)
       RETURN 
         s.title AS name,
