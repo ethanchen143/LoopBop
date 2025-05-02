@@ -48,9 +48,11 @@ export async function GET(request: NextRequest) {
                     pic: a.pic 
                 }) AS results
             `;
+            console.log('Genre:', arg);
             params = { genre: arg };
             result = await session.run(query, params);
             const songs = result.records.map(record => record.get('results'));
+            console.log('Songs:', songs);
             return NextResponse.json({ results: songs });
         
         case 'song':

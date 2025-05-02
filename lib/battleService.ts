@@ -111,8 +111,11 @@ export async function getBattleData(playerCount: number): Promise<BattleData> {
     const additionalGenres: Genre[] = additionalGenresResult.records.map(record => record.get("genre"));
     const allOptions: Genre[] = [...correctGenres, ...additionalGenres];
     
-    // Step 6: Shuffle the options to randomize order
-    const shuffledOptions = allOptions.sort(() => Math.random() - 0.5);
+    // ✅ Filter out genres missing `name` or `family`
+    const validOptions = allOptions.filter(g => g.name && g.family);
+
+    // Shuffle the valid ones
+    const shuffledOptions = validOptions.sort(() => Math.random() - 0.5);
     
     // Close the session
     await mainSession.close();
