@@ -538,9 +538,10 @@ export default function DashboardPage() {
         cancelAnimationFrame(animationFrameRef.current);
       }
       
+      const currentMount = mountRef.current;
       if (rendererRef.current && rendererRef.current.domElement) {
-        if (mountRef.current) {
-          mountRef.current.removeChild(rendererRef.current.domElement);
+        if (currentMount) {
+          currentMount.removeChild(rendererRef.current.domElement);
         }
       }
       
@@ -558,7 +559,8 @@ export default function DashboardPage() {
         }
       });
     };
-  }, [loading, mainGenres]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, mainGenres]); // MAIN_VIEW_CAMERA_POSITION and createFloatingBackgroundShapes are stable
 
   // Create infinite grid pattern for backrooms-like effect
   const createInfiniteGridPattern = (scene: THREE.Scene) => {
@@ -2686,7 +2688,8 @@ export default function DashboardPage() {
         element.removeEventListener('click', handleClick);
       }
     };
-  }, [loading, sceneRef.current, cameraRef.current, rendererRef.current,currentView,fetchSongDetails, fetchSongsForGenre, returnToMainView]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, currentView, fetchSongDetails, fetchSongsForGenre, returnToMainView]); // Refs are not valid dependencies
 
   
   const initSocket = async () => {
@@ -2801,7 +2804,8 @@ export default function DashboardPage() {
         socketRef.current.off('error');
       }
     };
-  }, [showBattleModal, roomCode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showBattleModal, roomCode]); // router is stable
 
   // Add a separate useEffect for socket cleanup on component unmount
   useEffect(() => {
@@ -3035,7 +3039,7 @@ export default function DashboardPage() {
       {/* Temp Account Banner */}
       {userData.isTemp && (
         <div className="bg-gradient-to-r from-yellow-600 to-orange-600 text-black px-4 py-2 text-center">
-          <span className="font-bold mr-4">Playing as Guest - Your progress won't be saved!</span>
+          <span className="font-bold mr-4">Playing as Guest - Your progress won&apos;t be saved!</span>
           <Button
             className="bg-black text-white hover:bg-gray-800 font-bold px-3 py-1"
             size="sm"
@@ -3210,7 +3214,7 @@ export default function DashboardPage() {
               <CardContent className="p-2">
                 {userData.isTemp ? (
                   <div className="text-center py-4">
-                    <p className="text-yellow-400 text-sm mb-2">Guest accounts don't appear on leaderboards</p>
+                    <p className="text-yellow-400 text-sm mb-2">Guest accounts don&apos;t appear on leaderboards</p>
                     <Button 
                       size="sm"
                       className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-bold"
@@ -3318,6 +3322,7 @@ export default function DashboardPage() {
               {!battleMode && (
                 <div className="flex flex-col gap-6">
                   <div className="mb-6 space-y-3 text-center">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src="/tutorial.png"               // whatever artwork you want
                       alt="How to play"
@@ -3613,6 +3618,7 @@ export default function DashboardPage() {
                 <div className="flex items-start space-x-5">
                   {songDetails.pic && (
                     <div className="flex-shrink-0">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={songDetails.pic}
                         alt={songDetails.album || "Album Cover"}

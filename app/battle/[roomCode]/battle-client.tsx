@@ -891,7 +891,8 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
       if (window.lastResetTimeout) clearTimeout(window.lastResetTimeout);
       if (window.nextRoundTimeout) clearTimeout(window.nextRoundTimeout);
     };
-  }, [socketRef, roomCode, router]); // Only dependencies that won't change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socketRef, roomCode, router]); // Intentionally omitting gameState?.players and userId to avoid re-running
 
   useEffect(() => {
     if (!currentRound || !currentRound.playerSelections) return;
@@ -911,7 +912,8 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
       setContainerDimensions(dimensionsRef.current);
     }, 100);
     
-  }, [currentRound?.playerSelections]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentRound?.playerSelections]); // Intentionally omitting currentRound to focus on playerSelections changes
 
   const togglePlayerEvaluation = (playerId:string) => {
     setExpandedPlayerId(current => current === playerId ? null : playerId);
@@ -922,7 +924,8 @@ export default function BattleGameClient({ roomCode }: { roomCode: string }) {
       console.log('Auto-triggering round evaluation');
       handleEvaluateRound();
     }
-  }, [roundComplete, currentRound?.status, currentPlayer?.isCreator]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roundComplete, currentRound?.status, currentPlayer?.isCreator]); // handleEvaluateRound is stable
 
   const handleEvaluateRound = () => {
     if (!socketRef.current || !currentPlayer?.isCreator) {

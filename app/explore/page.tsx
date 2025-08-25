@@ -318,6 +318,7 @@ export default function ExplorePage() {
                       <div className="flex flex-col items-center md:flex-row md:items-start gap-6">
                         {selectedItem.pic && (
                           <div className="w-48 h-48 rounded-full overflow-hidden border-4 border-pink-500/30 shadow-glow-pink flex-shrink-0">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img 
                               src={selectedItem.pic} 
                               alt={`${selectedItem.name}`} 
@@ -339,6 +340,7 @@ export default function ExplorePage() {
                       <div className="flex flex-col items-center md:flex-row md:items-start gap-6">
                         {selectedItem.pic && (
                           <div className="w-48 h-48 rounded-lg overflow-hidden border border-pink-500/30 shadow-glow-pink flex-shrink-0">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img 
                               src={selectedItem.pic} 
                               alt={`${selectedItem.name} Cover`} 
