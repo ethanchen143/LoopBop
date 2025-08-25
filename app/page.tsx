@@ -31,6 +31,28 @@ export default function LandingPage() {
     router.push('/auth');
   };
 
+  // Handle start game click - creates temp account
+  const handleStartGameClick = async () => {
+    try {
+      const response = await fetch('/api/temp-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('isTemp', 'true');
+        router.push('/dashboard');
+      } else {
+        console.error('Failed to create temp account:', data.message);
+      }
+    } catch (error) {
+      console.error('Error creating temp account:', error);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-black text-white flex flex-col relative overflow-hidden">
       {/* Background grid pattern - static and safe for SSR */}
@@ -57,7 +79,7 @@ export default function LandingPage() {
             className="bg-pink-500 hover:bg-pink-600 text-black font-bold" 
             onClick={handleLoginClick}
           >
-            Sign In
+            Log In
           </Button>
         </nav>
       </header>
@@ -80,9 +102,15 @@ export default function LandingPage() {
               <div className="flex flex-col sm:flex-row gap-4 w-full justify-center">
                 <Button 
                   className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-bold text-lg py-6 px-8 rounded-lg shadow-glow-cyan transform transition-transform hover:scale-105"
+                  onClick={handleStartGameClick}
+                >
+                  Start Game
+                </Button>
+                <Button 
+                  className="bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-bold text-lg py-6 px-8 rounded-lg shadow-glow-pink transform transition-transform hover:scale-105"
                   onClick={handleLoginClick}
                 >
-                  Get Started
+                  Log In
                 </Button>
               </div>
             </div>
@@ -221,7 +249,7 @@ export default function LandingPage() {
                 className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-bold text-lg py-6 px-8 rounded-lg shadow-glow-cyan transform transition-transform hover:scale-105"
                 onClick={() => {
                   setAboutOpen(false);
-                  handleLoginClick();
+                  handleStartGameClick();
                 }}
               >
                 Start Game

@@ -17,6 +17,7 @@ interface UserData {
   correct_count: number;
   accuracy?: number;
   rank?: number;
+  isTemp?: boolean;
 }
 
 interface LeaderboardEntry {
@@ -3031,6 +3032,20 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-black text-white">
+      {/* Temp Account Banner */}
+      {userData.isTemp && (
+        <div className="bg-gradient-to-r from-yellow-600 to-orange-600 text-black px-4 py-2 text-center">
+          <span className="font-bold mr-4">Playing as Guest - Your progress won't be saved!</span>
+          <Button
+            className="bg-black text-white hover:bg-gray-800 font-bold px-3 py-1"
+            size="sm"
+            onClick={() => router.push("/auth")}
+          >
+            Create Account
+          </Button>
+        </div>
+      )}
+      
       {/* Header with pop art styling */}
       <header className="px-4 lg:px-6 h-14 flex items-center bg-gradient-to-r from-indigo-900 via-black to-indigo-900 border-b-4 border-pink-500 z-10">
         {currentView !== "genres" && <Button
@@ -3042,16 +3057,19 @@ export default function DashboardPage() {
           Reset
         </Button>}
         <nav className="ml-auto flex items-center space-x-4">
-          <span className="text-sm font-medium text-cyan-400 hover:text-pink-400 transition-colors">{userData.email}</span>
+          <span className="text-sm font-medium text-cyan-400 hover:text-pink-400 transition-colors">
+            {userData.isTemp ? "Guest Player" : userData.email}
+          </span>
           <Button
             className="bg-pink-500 hover:bg-pink-600 text-black font-bold"
             size="sm"
             onClick={() => {
               localStorage.removeItem("token");
+              localStorage.removeItem("isTemp");
               router.push("/");
             }}
           >
-            Sign Out
+            {userData.isTemp ? "Exit" : "Sign Out"}
           </Button>
         </nav>
       </header>
@@ -3190,46 +3208,61 @@ export default function DashboardPage() {
             </CardHeader>
             {showLeaderboard && (
               <CardContent className="p-2">
-                <div className="mb-2">
-                  <div className="flex justify-between items-center px-2 text-xs text-gray-400 font-medium">
-                    <span>User</span>
-                    <div className="flex space-x-4">
-                      <span className="w-16 text-center">Accuracy</span>
-                      <span className="w-16 text-center">Songs</span>
-                    </div>
-                  </div>
-                </div>
-                <ul className="space-y-2 text-sm">
-                  {leaderboard.slice(0, 5).map((entry) => (
-                    <li
-                      key={entry.email}
-                      className={`flex justify-between items-center p-2 rounded ${
-                        entry.email === userData.email ? 'bg-gradient-to-r from-pink-500/30 to-indigo-900/70 border-2 border-pink-500' : 'bg-indigo-900/30'
-                      }`}
+                {userData.isTemp ? (
+                  <div className="text-center py-4">
+                    <p className="text-yellow-400 text-sm mb-2">Guest accounts don't appear on leaderboards</p>
+                    <Button 
+                      size="sm"
+                      className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-bold"
+                      onClick={() => router.push("/auth")}
                     >
-                      <span className={`${entry.email === userData.email ? 'text-cyan-400 font-bold' : 'text-white'}`}>
-                        {entry.email.split('@')[0].slice(0, 9)}
-                      </span>
-                      <div className="flex space-x-4">
-                        <span className="w-16 text-center text-yellow-400 font-bold">{entry.accuracy.toFixed(1)}%</span>
-                        <span className="w-16 text-center text-green-400 font-bold">{entry.exercises_count}</span>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-                {userData && userData.email && (
-                !leaderboard.slice(0, 5).some(entry => entry.email === userData.email) ? (
-                  <div className="mt-3 p-2 bg-indigo-900/30 rounded flex justify-between items-center">
-                    <span className="text-cyan-400 font-bold text-sm">
-                      {userData.rank ? `${userData.rank}.` : ""} {userData.email.split('@')[0]}
-                    </span>
-                    <div className="flex space-x-4">
-                      <span className="w-16 text-center text-yellow-400 font-bold text-sm">{userData.accuracy?.toFixed(1)}%</span>
-                      <span className="w-16 text-center text-green-400 font-bold text-sm">{userData.exercises_count}</span>
-                    </div>
+                      Create Account
+                    </Button>
                   </div>
-                ) : null
-              )}
+                ) : (
+                  <>
+                    <div className="mb-2">
+                      <div className="flex justify-between items-center px-2 text-xs text-gray-400 font-medium">
+                        <span>User</span>
+                        <div className="flex space-x-4">
+                          <span className="w-16 text-center">Accuracy</span>
+                          <span className="w-16 text-center">Songs</span>
+                        </div>
+                      </div>
+                    </div>
+                    <ul className="space-y-2 text-sm">
+                      {leaderboard.slice(0, 5).map((entry) => (
+                        <li
+                          key={entry.email}
+                          className={`flex justify-between items-center p-2 rounded ${
+                            entry.email === userData.email ? 'bg-gradient-to-r from-pink-500/30 to-indigo-900/70 border-2 border-pink-500' : 'bg-indigo-900/30'
+                          }`}
+                        >
+                          <span className={`${entry.email === userData.email ? 'text-cyan-400 font-bold' : 'text-white'}`}>
+                            {entry.email.split('@')[0].slice(0, 9)}
+                          </span>
+                          <div className="flex space-x-4">
+                            <span className="w-16 text-center text-yellow-400 font-bold">{entry.accuracy.toFixed(1)}%</span>
+                            <span className="w-16 text-center text-green-400 font-bold">{entry.exercises_count}</span>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                    {userData && userData.email && (
+                    !leaderboard.slice(0, 5).some(entry => entry.email === userData.email) ? (
+                      <div className="mt-3 p-2 bg-indigo-900/30 rounded flex justify-between items-center">
+                        <span className="text-cyan-400 font-bold text-sm">
+                          {userData.rank ? `${userData.rank}.` : ""} {userData.email.split('@')[0]}
+                        </span>
+                        <div className="flex space-x-4">
+                          <span className="w-16 text-center text-yellow-400 font-bold text-sm">{userData.accuracy?.toFixed(1)}%</span>
+                          <span className="w-16 text-center text-green-400 font-bold text-sm">{userData.exercises_count}</span>
+                        </div>
+                      </div>
+                    ) : null
+                  )}
+                  </>
+                )}
               </CardContent>
             )}
           </Card>
